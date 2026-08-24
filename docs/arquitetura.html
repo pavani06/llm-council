@@ -1,0 +1,616 @@
+<title>Anatomia do Council</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+:root{
+  --ground:#f1f3f6; --surface:#ffffff; --surface-2:#e7eaef; --sunk:#dfe3ea;
+  --ink:#191d25; --ink-2:#495264; --ink-3:#727c8f; --rule:#d1d6de;
+  --seal:#8f2d3f; --blind:#3c5c88; --ok:#2f6b4f; --warn:#87621a;
+  --seal-wash:#f6e9eb; --blind-wash:#e8eef7;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#12151b; --surface:#1a1e26; --surface-2:#222731; --sunk:#161a21;
+    --ink:#e7e9ee; --ink-2:#a9b1c0; --ink-3:#7b8496; --rule:#2c3240;
+    --seal:#d97e8e; --blind:#83a7da; --ok:#6cbe94; --warn:#d2a552;
+    --seal-wash:#2a1a1f; --blind-wash:#18202e;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#12151b; --surface:#1a1e26; --surface-2:#222731; --sunk:#161a21;
+  --ink:#e7e9ee; --ink-2:#a9b1c0; --ink-3:#7b8496; --rule:#2c3240;
+  --seal:#d97e8e; --blind:#83a7da; --ok:#6cbe94; --warn:#d2a552;
+  --seal-wash:#2a1a1f; --blind-wash:#18202e;
+}
+
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:"IBM Plex Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+  font-size:16px; line-height:1.65; -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1060px; margin:0 auto; padding:0 24px 96px}
+.col{max-width:68ch}
+
+/* ---------- cabeçalho ---------- */
+header{padding:72px 0 48px; border-bottom:1px solid var(--rule); margin-bottom:56px}
+.eyebrow{
+  font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--seal); margin:0 0 20px;
+}
+h1{
+  font-family:Spectral,Georgia,serif; font-weight:600; font-size:clamp(38px,6vw,60px);
+  line-height:1.06; letter-spacing:-.015em; margin:0 0 22px; text-wrap:balance;
+}
+.lede{font-size:19px; line-height:1.6; color:var(--ink-2); margin:0; max-width:60ch}
+.lede em{font-style:normal; color:var(--ink); border-bottom:2px solid var(--seal); padding-bottom:1px}
+
+.facts{
+  display:flex; flex-wrap:wrap; gap:0; margin-top:40px;
+  border:1px solid var(--rule); border-radius:3px; overflow:hidden; background:var(--surface);
+}
+.fact{flex:1 1 150px; padding:16px 18px; border-right:1px solid var(--rule)}
+.fact:last-child{border-right:none}
+.fact dt{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); margin:0 0 6px;
+}
+.fact dd{margin:0; font-size:15px; font-weight:500; font-variant-numeric:tabular-nums}
+
+/* ---------- seções ---------- */
+section{margin-bottom:72px}
+h2{
+  font-family:Spectral,Georgia,serif; font-weight:600; font-size:30px; line-height:1.2;
+  margin:0 0 8px; letter-spacing:-.01em; text-wrap:balance;
+}
+h3{font-size:17px; font-weight:600; margin:36px 0 10px; letter-spacing:-.005em}
+.stage-tag{
+  display:inline-block; font-family:"IBM Plex Mono",monospace; font-size:12px;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3);
+  border:1px solid var(--rule); border-radius:2px; padding:3px 9px; margin-bottom:14px;
+}
+p{margin:0 0 16px}
+a{color:var(--seal)}
+strong{font-weight:600}
+code{
+  font-family:"IBM Plex Mono",monospace; font-size:.88em; background:var(--surface-2);
+  padding:1px 5px; border-radius:2px; color:var(--ink);
+}
+
+/* ---------- figuras ---------- */
+figure{margin:32px 0; padding:0}
+.figbox{
+  background:var(--surface); border:1px solid var(--rule); border-radius:3px;
+  padding:24px; overflow-x:auto;
+}
+figure svg{display:block; width:100%; min-width:520px; height:auto; color:var(--ink)}
+/* accents dentro do SVG resolvem pelos tokens — hex literal quebraria no tema escuro */
+figure svg .s-seal{stroke:var(--seal)}
+figure svg .f-seal{fill:var(--seal)}
+figure svg .s-blind{stroke:var(--blind)}
+figure svg .f-blind{fill:var(--blind)}
+figcaption{
+  margin-top:12px; font-size:14px; line-height:1.55; color:var(--ink-2); max-width:70ch;
+}
+figcaption b{color:var(--ink); font-weight:600}
+
+/* ---------- tabelas ---------- */
+.tbl-wrap{overflow-x:auto; margin:24px 0}
+table{
+  width:100%; border-collapse:collapse; font-size:14px; background:var(--surface);
+  border:1px solid var(--rule); border-radius:3px;
+}
+th,td{padding:9px 14px; text-align:left; border-bottom:1px solid var(--rule)}
+th{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--ink-3); font-weight:500; background:var(--sunk);
+}
+tbody tr:last-child td{border-bottom:none}
+td.num{font-variant-numeric:tabular-nums; font-family:"IBM Plex Mono",monospace}
+td.mono,th.mono{font-family:"IBM Plex Mono",monospace; font-size:13px}
+
+/* ---------- notas ---------- */
+.note{
+  border-left:3px solid var(--seal); background:var(--seal-wash);
+  padding:16px 20px; margin:24px 0; border-radius:0 3px 3px 0;
+}
+.note.blind{border-left-color:var(--blind); background:var(--blind-wash)}
+.note p:last-child{margin-bottom:0}
+.note .lbl{
+  font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.11em;
+  text-transform:uppercase; color:var(--seal); display:block; margin-bottom:6px;
+}
+.note.blind .lbl{color:var(--blind)}
+
+ul{margin:0 0 16px; padding-left:22px}
+li{margin-bottom:8px}
+li::marker{color:var(--ink-3)}
+
+.split{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; margin:24px 0}
+.card{background:var(--surface); border:1px solid var(--rule); border-radius:3px; padding:18px 20px}
+.card h4{
+  margin:0 0 8px; font-size:14px; font-family:"IBM Plex Mono",monospace;
+  font-weight:500; letter-spacing:.04em;
+}
+.card p{font-size:14.5px; color:var(--ink-2); margin:0}
+
+footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); font-size:13.5px}
+</style>
+
+<div class="wrap">
+
+<header>
+  <p class="eyebrow">Mapa arquitetural · ~/llm-council</p>
+  <h1>Anatomia do Council</h1>
+  <p class="lede">Quatro modelos de provedores diferentes respondem à mesma pergunta, avaliam-se <em>sem saber quem escreveu o quê</em>, e um presidente que não é membro do conselho sintetiza o resultado.</p>
+
+  <dl class="facts">
+    <div class="fact"><dt>Módulos</dt><dd>7</dd></div>
+    <div class="fact"><dt>Linhas</dt><dd>1 720</dd></div>
+    <div class="fact"><dt>Dependências</dt><dd>1 (SDK anthropic)</dd></div>
+    <div class="fact"><dt>Conselheiros</dt><dd>4 + presidente</dd></div>
+    <div class="fact"><dt>Checagens</dt><dd>67 offline</dd></div>
+  </dl>
+</header>
+
+<!-- ============ 1. PIPELINE ============ -->
+<section>
+  <div class="col">
+    <span class="stage-tag">Estágio 1 → 2 → 3</span>
+    <h2>O caminho de uma pergunta</h2>
+    <p>Uma execução atravessa três estágios e produz duas saídas: a resposta em <code>stdout</code> e um registro selado em <code>runs/</code>. Nada entre os estágios é opcional por acaso — cada seta abaixo é uma transformação que existe para tirar um viés específico do resultado.</p>
+  </div>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 760 700" role="img" aria-label="Fluxo de três estágios: a pergunta vai em paralelo a quatro conselheiros; as respostas passam por máscara de identidade; cada conselheiro ranqueia os outros às cegas; o Borda agrega; o presidente sintetiza; a saída é a resposta mais um registro com sha256.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="ahs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="f-seal"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Sans, sans-serif" font-size="12.5">
+
+          <!-- pergunta -->
+          <rect x="300" y="14" width="160" height="38" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="380" y="38" text-anchor="middle" font-weight="500">pergunta</text>
+
+          <!-- fan out -->
+          <line x1="380" y1="52" x2="380" y2="72" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="80" y1="72" x2="680" y2="72" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="80" y1="72" x2="80" y2="98" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah)"/>
+          <line x1="280" y1="72" x2="280" y2="98" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah)"/>
+          <line x1="480" y1="72" x2="480" y2="98" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah)"/>
+          <line x1="680" y1="72" x2="680" y2="98" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah)"/>
+          <text x="392" y="66" font-size="11" fill="currentColor" opacity=".65">4 threads, em paralelo</text>
+
+          <!-- estagio 1 -->
+          <text x="14" y="92" font-family="IBM Plex Mono, monospace" font-size="10.5" opacity=".6">1</text>
+          <g stroke="currentColor" stroke-width="1.4" fill="none">
+            <rect x="20" y="104" width="120" height="34" rx="2"/>
+            <rect x="220" y="104" width="120" height="34" rx="2"/>
+            <rect x="420" y="104" width="120" height="34" rx="2"/>
+            <rect x="620" y="104" width="120" height="34" rx="2"/>
+          </g>
+          <g text-anchor="middle" font-weight="500">
+            <text x="80" y="125">gpt</text>
+            <text x="280" y="125">deepseek</text>
+            <text x="480" y="125">claude</text>
+            <text x="680" y="125">glm</text>
+          </g>
+          <g text-anchor="middle" font-size="10" opacity=".6" font-family="IBM Plex Mono, monospace">
+            <text x="80" y="152">openai</text>
+            <text x="280" y="152">deepseek</text>
+            <text x="480" y="152">anthropic</text>
+            <text x="680" y="152">z.ai</text>
+          </g>
+
+          <!-- converge para o scrub -->
+          <g stroke="currentColor" stroke-width="1.2" fill="none">
+            <line x1="80" y1="160" x2="80" y2="178"/><line x1="280" y1="160" x2="280" y2="178"/>
+            <line x1="480" y1="160" x2="480" y2="178"/><line x1="680" y1="160" x2="680" y2="178"/>
+            <line x1="80" y1="178" x2="680" y2="178"/>
+            <line x1="380" y1="178" x2="380" y2="196" marker-end="url(#ahs)" class="s-seal" stroke-width="1.6"/>
+          </g>
+
+          <!-- scrub -->
+          <rect x="150" y="200" width="460" height="44" rx="2" fill="none" class="s-seal" stroke-width="1.6"/>
+          <text x="380" y="219" text-anchor="middle" font-weight="600" class="f-seal">máscara de identidade</text>
+          <text x="380" y="235" text-anchor="middle" font-size="10.5" class="f-seal" opacity=".85">"como modelo da X…" → "[modelo]" · termo citado na pergunta é preservado</text>
+
+          <!-- fan out para cedulas -->
+          <line x1="380" y1="244" x2="380" y2="262" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="80" y1="262" x2="680" y2="262" stroke="currentColor" stroke-width="1.2"/>
+          <g stroke="currentColor" stroke-width="1.2">
+            <line x1="80" y1="262" x2="80" y2="288" marker-end="url(#ah)"/>
+            <line x1="280" y1="262" x2="280" y2="288" marker-end="url(#ah)"/>
+            <line x1="480" y1="262" x2="480" y2="288" marker-end="url(#ah)"/>
+            <line x1="680" y1="262" x2="680" y2="288" marker-end="url(#ah)"/>
+          </g>
+
+          <!-- estagio 2 -->
+          <text x="14" y="282" font-family="IBM Plex Mono, monospace" font-size="10.5" opacity=".6">2</text>
+          <g class="s-blind" stroke-width="1.4" fill="none">
+            <rect x="20" y="294" width="120" height="46" rx="2"/>
+            <rect x="220" y="294" width="120" height="46" rx="2"/>
+            <rect x="420" y="294" width="120" height="46" rx="2"/>
+            <rect x="620" y="294" width="120" height="46" rx="2"/>
+          </g>
+          <g text-anchor="middle" class="f-blind" font-weight="500">
+            <text x="80" y="313">cédula de gpt</text>
+            <text x="280" y="313">cédula de deepseek</text>
+            <text x="480" y="313">cédula de claude</text>
+            <text x="680" y="313">cédula de glm</text>
+          </g>
+          <g text-anchor="middle" class="f-blind" font-size="10" opacity=".85" font-family="IBM Plex Mono, monospace">
+            <text x="80" y="330">julga 3, não a si</text>
+            <text x="280" y="330">julga 3, não a si</text>
+            <text x="480" y="330">julga 3, não a si</text>
+            <text x="680" y="330">julga 3, não a si</text>
+          </g>
+          <text x="380" y="360" text-anchor="middle" font-size="11" class="f-blind">rótulos A/B/C embaralhados por avaliador — ninguém vê a mesma ordem</text>
+
+          <!-- converge para borda -->
+          <g stroke="currentColor" stroke-width="1.2" fill="none">
+            <line x1="80" y1="340" x2="80" y2="374"/><line x1="280" y1="340" x2="280" y2="374"/>
+            <line x1="480" y1="340" x2="480" y2="374"/><line x1="680" y1="340" x2="680" y2="374"/>
+            <line x1="80" y1="374" x2="680" y2="374"/>
+            <line x1="380" y1="374" x2="380" y2="396" marker-end="url(#ah)"/>
+          </g>
+
+          <!-- borda -->
+          <rect x="230" y="400" width="300" height="56" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="380" y="421" text-anchor="middle" font-weight="600">Borda normalizado</text>
+          <text x="380" y="438" text-anchor="middle" font-size="10.5" opacity=".7">score 0–1 · posições · dispersão</text>
+          <text x="380" y="451" text-anchor="middle" font-size="10.5" opacity=".7">dispersão alta → "conselho dividido"</text>
+
+          <line x1="380" y1="456" x2="380" y2="482" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah)"/>
+          <text x="392" y="474" font-size="10.5" opacity=".65">tabela agregada, não o texto cru</text>
+
+          <!-- estagio 3 -->
+          <text x="14" y="500" font-family="IBM Plex Mono, monospace" font-size="10.5" opacity=".6">3</text>
+          <rect x="230" y="486" width="300" height="52" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <text x="380" y="507" text-anchor="middle" font-weight="600">presidente</text>
+          <text x="380" y="524" text-anchor="middle" font-size="10.5" opacity=".7">fora do conselho · também cego</text>
+
+          <!-- saidas -->
+          <line x1="380" y1="538" x2="380" y2="556" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="200" y1="556" x2="560" y2="556" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="200" y1="556" x2="200" y2="580" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah)"/>
+          <line x1="560" y1="556" x2="560" y2="580" class="s-seal" stroke-width="1.4" marker-end="url(#ahs)"/>
+
+          <rect x="120" y="586" width="160" height="42" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="200" y="604" text-anchor="middle" font-weight="500">resposta</text>
+          <text x="200" y="619" text-anchor="middle" font-size="10" opacity=".6" font-family="IBM Plex Mono, monospace">stdout</text>
+
+          <rect x="480" y="586" width="160" height="42" rx="2" fill="none" class="s-seal" stroke-width="1.4"/>
+          <text x="560" y="604" text-anchor="middle" font-weight="500" class="f-seal">registro selado</text>
+          <text x="560" y="619" text-anchor="middle" font-size="10" class="f-seal" opacity=".85" font-family="IBM Plex Mono, monospace">runs/…-sha256.json</text>
+
+          <text x="380" y="662" text-anchor="middle" font-size="11" opacity=".7">o registro guarda prompts, respostas, cédulas, mapa de rótulos e a seed — a rodada é reconstituível</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>Duas transformações carregam o valor do desenho.</b> A máscara de identidade (em vermelho) entra entre o estágio 1 e o 2 porque sem ela o anonimato dos rótulos é ficção: modelos assinam a própria resposta no texto. E o presidente recebe a tabela agregada em vez do texto cru dos rankings — o que corta contexto e evita que ele reproduza o julgamento de um avaliador em vez de sintetizar o conjunto.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 2. CEGAMENTO ============ -->
+<section>
+  <div class="col">
+    <span class="stage-tag">Estágio 2, em detalhe</span>
+    <h2>O que cada avaliador realmente vê</h2>
+    <p>Este é o mecanismo que separa o council do original em que ele se inspira. Três regras agem juntas, e cada uma sozinha seria insuficiente.</p>
+  </div>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 760 300" role="img" aria-label="Mapa de rótulos por avaliador: a letra A designa um autor diferente para cada um dos quatro avaliadores, e nenhum avaliador encontra a própria resposta entre os candidatos.">
+        <g font-family="IBM Plex Sans, sans-serif" font-size="12.5">
+          <text x="20" y="22" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1" opacity=".6">MAPA DE RÓTULOS DE UMA EXECUÇÃO REAL</text>
+
+          <!-- colunas -->
+          <g font-family="IBM Plex Mono, monospace" font-size="11" opacity=".6" text-anchor="middle">
+            <text x="300" y="52">rótulo A</text>
+            <text x="450" y="52">rótulo B</text>
+            <text x="600" y="52">rótulo C</text>
+            <text x="700" y="52">ausente</text>
+          </g>
+          <line x1="20" y1="62" x2="740" y2="62" stroke="currentColor" stroke-width="1" opacity=".35"/>
+
+          <!-- linhas -->
+          <g>
+            <text x="20" y="92" font-weight="600">avaliador gpt</text>
+            <text x="300" y="92" text-anchor="middle" class="f-blind">deepseek</text>
+            <text x="450" y="92" text-anchor="middle" class="f-blind">claude</text>
+            <text x="600" y="92" text-anchor="middle" class="f-blind">glm</text>
+            <text x="700" y="92" text-anchor="middle" class="f-seal" font-weight="600">gpt</text>
+          </g>
+          <line x1="20" y1="106" x2="740" y2="106" stroke="currentColor" stroke-width="1" opacity=".18"/>
+          <g>
+            <text x="20" y="136" font-weight="600">avaliador deepseek</text>
+            <text x="300" y="136" text-anchor="middle" class="f-blind">gpt</text>
+            <text x="450" y="136" text-anchor="middle" class="f-blind">glm</text>
+            <text x="600" y="136" text-anchor="middle" class="f-blind">claude</text>
+            <text x="700" y="136" text-anchor="middle" class="f-seal" font-weight="600">deepseek</text>
+          </g>
+          <line x1="20" y1="150" x2="740" y2="150" stroke="currentColor" stroke-width="1" opacity=".18"/>
+          <g>
+            <text x="20" y="180" font-weight="600">avaliador claude</text>
+            <text x="300" y="180" text-anchor="middle" class="f-blind">deepseek</text>
+            <text x="450" y="180" text-anchor="middle" class="f-blind">glm</text>
+            <text x="600" y="180" text-anchor="middle" class="f-blind">gpt</text>
+            <text x="700" y="180" text-anchor="middle" class="f-seal" font-weight="600">claude</text>
+          </g>
+          <line x1="20" y1="194" x2="740" y2="194" stroke="currentColor" stroke-width="1" opacity=".18"/>
+          <g>
+            <text x="20" y="224" font-weight="600">avaliador glm</text>
+            <text x="300" y="224" text-anchor="middle" class="f-blind">claude</text>
+            <text x="450" y="224" text-anchor="middle" class="f-blind">gpt</text>
+            <text x="600" y="224" text-anchor="middle" class="f-blind">deepseek</text>
+            <text x="700" y="224" text-anchor="middle" class="f-seal" font-weight="600">glm</text>
+          </g>
+          <line x1="20" y1="238" x2="740" y2="238" stroke="currentColor" stroke-width="1" opacity=".35"/>
+
+          <text x="20" y="266" font-size="11.5" class="f-blind">"Resposta A" designa um autor diferente para cada avaliador — o viés de posição não se acumula.</text>
+          <text x="20" y="286" font-size="11.5" class="f-seal">A diagonal está vazia: a própria resposta nunca entra na cédula de quem a escreveu.</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>A coluna "ausente" é a auto-exclusão; as três primeiras colunas são o embaralhamento.</b> Cada resposta é julgada por exatamente N−1 cédulas, todas do mesmo tamanho — é isso que mantém a agregação Borda balanceada apesar de cada avaliador ver um conjunto diferente de candidatos.</figcaption>
+  </figure>
+
+  <div class="split">
+    <div class="card">
+      <h4>exclude_self_rank</h4>
+      <p>Ninguém julga a própria resposta. Sem isso, o modelo mais confiante se auto-promove e o ranking vira medida de confiança, não de qualidade.</p>
+    </div>
+    <div class="card">
+      <h4>shuffle_labels</h4>
+      <p>A ordem A/B/C é sorteada por avaliador, a partir da seed da execução. Se todos vissem a mesma ordem, o viés de posição de quatro modelos somaria em vez de cancelar.</p>
+    </div>
+    <div class="card">
+      <h4>scrub_identity</h4>
+      <p>Marcas de autoria são mascaradas no texto. Exceção deliberada: termo que aparece na sua pergunta não é mascarado — cegar não pode custar o assunto.</p>
+    </div>
+  </div>
+
+  <div class="note blind">
+    <span class="lbl">Por que o Borda continua justo</span>
+    <p>Com auto-exclusão cada avaliador julga um conjunto diferente, o que normalmente inviabilizaria comparação direta. Aqui não: com N membros, toda resposta aparece em exatamente N−1 cédulas, e toda cédula tem exatamente N−1 candidatos. O desenho é simétrico, então a soma normalizada de pontos é comparável entre membros sem correção.</p>
+  </div>
+</section>
+
+<!-- ============ 3. MÓDULOS ============ -->
+<section>
+  <div class="col">
+    <span class="stage-tag">Código</span>
+    <h2>Sete módulos, um só que amarra</h2>
+    <p>A dependência interna é um DAG raso e deliberado. Três módulos não importam nada de dentro do projeto — são testáveis sem rede, sem config e sem mock. O <code>engine</code> é o único lugar onde tudo se encontra.</p>
+  </div>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 760 380" role="img" aria-label="Grafo de dependências: cli e mcp_server dependem de engine; engine depende de config, prompts, ranking e providers; config depende de providers; prompts, ranking e providers não têm dependências internas.">
+        <defs>
+          <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Sans, sans-serif" font-size="12.5">
+
+          <text x="20" y="24" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1" opacity=".6">ENTRADAS</text>
+          <g stroke="currentColor" stroke-width="1.4" fill="none">
+            <rect x="140" y="36" width="180" height="44" rx="2"/>
+            <rect x="440" y="36" width="180" height="44" rx="2"/>
+          </g>
+          <text x="230" y="56" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500">cli.py</text>
+          <text x="230" y="71" text-anchor="middle" font-size="10" opacity=".6">ask · doctor · models · show</text>
+          <text x="530" y="56" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500">mcp_server.py</text>
+          <text x="530" y="71" text-anchor="middle" font-size="10" opacity=".6">stdio JSON-RPC · 2 tools</text>
+
+          <line x1="230" y1="80" x2="340" y2="122" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah2)"/>
+          <line x1="530" y1="80" x2="420" y2="122" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah2)"/>
+
+          <text x="20" y="150" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1" opacity=".6">ORQUESTRAÇÃO</text>
+          <rect x="270" y="128" width="220" height="52" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>
+          <text x="380" y="150" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="600">engine.py</text>
+          <text x="380" y="167" text-anchor="middle" font-size="10" opacity=".65">os 3 estágios · o registro · os avisos</text>
+
+          <!-- engine -> folhas -->
+          <g stroke="currentColor" stroke-width="1.2" fill="none">
+            <line x1="310" y1="180" x2="150" y2="246" marker-end="url(#ah2)"/>
+            <line x1="350" y1="180" x2="330" y2="246" marker-end="url(#ah2)"/>
+            <line x1="410" y1="180" x2="500" y2="246" marker-end="url(#ah2)"/>
+            <line x1="450" y1="180" x2="640" y2="246" marker-end="url(#ah2)"/>
+          </g>
+
+          <text x="20" y="272" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1" opacity=".6">FOLHAS</text>
+          <g stroke="currentColor" stroke-width="1.4" fill="none">
+            <rect x="80" y="252" width="140" height="44" rx="2"/>
+            <rect x="264" y="252" width="140" height="44" rx="2"/>
+            <rect x="440" y="252" width="140" height="44" rx="2"/>
+            <rect x="600" y="252" width="140" height="44" rx="2"/>
+          </g>
+          <g text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500">
+            <text x="150" y="272">config.py</text>
+            <text x="334" y="272">prompts.py</text>
+            <text x="510" y="272">ranking.py</text>
+            <text x="670" y="272">providers.py</text>
+          </g>
+          <g text-anchor="middle" font-size="10" opacity=".6">
+            <text x="150" y="288">TOML + .env</text>
+            <text x="334" y="288">os 2 prompts</text>
+            <text x="510" y="288">cegamento + Borda</text>
+            <text x="670" y="288">HTTP + SDK</text>
+          </g>
+
+          <!-- config -> providers -->
+          <path d="M 220 282 C 320 336, 560 336, 660 300" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ah2)"/>
+          <text x="440" y="340" text-anchor="middle" font-size="10.5" opacity=".7">config monta o Endpoint certo para cada provedor</text>
+
+          <text x="20" y="372" font-size="11" opacity=".7">prompts, ranking e providers não importam nada do projeto — testáveis isoladamente, sem rede.</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>A direção das setas é a razão de o teste offline existir sem mock de rede.</b> <code>ranking.py</code> concentra cegamento, parsing de cédula e Borda sem conhecer provedor, config ou HTTP — as 67 checagens exercitam a lógica que decide o resultado sem tocar em nenhuma API.</figcaption>
+  </figure>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th class="mono">módulo</th><th>responsabilidade</th><th>linhas</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">providers.py</td><td>Fala com os provedores. Dois adaptadores, tipos de erro, contagem de tokens, detecção de truncamento.</td><td class="num">447</td></tr>
+        <tr><td class="mono">engine.py</td><td>Orquestra os três estágios, monta o registro, transforma falha em aviso nomeado.</td><td class="num">318</td></tr>
+        <tr><td class="mono">cli.py</td><td>Quatro comandos e a apresentação no terminal.</td><td class="num">249</td></tr>
+        <tr><td class="mono">ranking.py</td><td>Cegamento, parsing tolerante de cédula, Borda, detecção de conselho dividido.</td><td class="num">214</td></tr>
+        <tr><td class="mono">mcp_server.py</td><td>Servidor MCP stdio escrito à mão, sem dependência.</td><td class="num">215</td></tr>
+        <tr><td class="mono">config.py</td><td>Carrega TOML e <code>.env</code>, valida o roster, monta endpoints.</td><td class="num">175</td></tr>
+        <tr><td class="mono">prompts.py</td><td>Os dois prompts que você vai querer editar, isolados de propósito.</td><td class="num">96</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 4. PROVEDORES ============ -->
+<section>
+  <div class="col">
+    <span class="stage-tag">Camada de saída</span>
+    <h2>Uma interface, dois adaptadores, quatro fios diferentes</h2>
+    <p>O <code>engine</code> chama sempre o mesmo método. Abaixo dele, o que muda entre provedores não é só a URL — é qual parâmetro existe, como se autentica, e o que significa "a resposta acabou".</p>
+  </div>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 760 340" role="img" aria-label="O engine chama uma única interface de chat; abaixo dela o Endpoint de stdlib atende OpenAI, DeepSeek e z.ai com declarações por provedor, e o AnthropicEndpoint atende a Anthropic pelo SDK oficial.">
+        <defs>
+          <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Sans, sans-serif" font-size="12.5">
+
+          <rect x="290" y="14" width="180" height="38" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <text x="380" y="38" text-anchor="middle" font-weight="600" font-family="IBM Plex Mono, monospace">engine</text>
+
+          <line x1="380" y1="52" x2="380" y2="76" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah3)"/>
+          <text x="392" y="70" font-size="10.5" opacity=".7">chat(model, messages, max_tokens, …) → Reply</text>
+
+          <line x1="380" y1="84" x2="380" y2="100" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="190" y1="100" x2="600" y2="100" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="190" y1="100" x2="190" y2="124" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah3)"/>
+          <line x1="600" y1="100" x2="600" y2="124" class="s-seal" stroke-width="1.4" marker-end="url(#ah3)"/>
+
+          <!-- adaptador stdlib -->
+          <rect x="40" y="130" width="300" height="60" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <text x="190" y="152" text-anchor="middle" font-weight="600" font-family="IBM Plex Mono, monospace">Endpoint</text>
+          <text x="190" y="169" text-anchor="middle" font-size="10.5" opacity=".7">urllib + threads · zero dependência</text>
+          <text x="190" y="183" text-anchor="middle" font-size="10.5" opacity=".7">retries e backoff próprios</text>
+
+          <!-- adaptador sdk -->
+          <rect x="450" y="130" width="270" height="60" rx="2" fill="none" class="s-seal" stroke-width="1.6"/>
+          <text x="585" y="152" text-anchor="middle" font-weight="600" class="f-seal" font-family="IBM Plex Mono, monospace">AnthropicEndpoint</text>
+          <text x="585" y="169" text-anchor="middle" font-size="10.5" class="f-seal" opacity=".85">SDK oficial anthropic</text>
+          <text x="585" y="183" text-anchor="middle" font-size="10.5" class="f-seal" opacity=".85">auth, retries e erros vêm dele</text>
+
+          <!-- fios -->
+          <g stroke="currentColor" stroke-width="1.2" fill="none">
+            <line x1="100" y1="190" x2="100" y2="228" marker-end="url(#ah3)"/>
+            <line x1="190" y1="190" x2="190" y2="228" marker-end="url(#ah3)"/>
+            <line x1="280" y1="190" x2="280" y2="228" marker-end="url(#ah3)"/>
+          </g>
+          <line x1="585" y1="190" x2="585" y2="228" class="s-seal" stroke-width="1.4" marker-end="url(#ah3)"/>
+
+          <g stroke="currentColor" stroke-width="1.3" fill="none">
+            <rect x="40" y="234" width="120" height="62" rx="2"/>
+            <rect x="172" y="234" width="120" height="62" rx="2"/>
+            <rect x="304" y="234" width="120" height="62" rx="2"/>
+          </g>
+          <rect x="500" y="234" width="170" height="62" rx="2" fill="none" class="s-seal" stroke-width="1.3"/>
+
+          <g text-anchor="middle" font-weight="500" font-size="12">
+            <text x="100" y="254">OpenAI</text>
+            <text x="232" y="254">DeepSeek</text>
+            <text x="364" y="254">z.ai</text>
+            <text x="585" y="254" class="f-seal">Anthropic</text>
+          </g>
+          <g text-anchor="middle" font-size="9.5" opacity=".72" font-family="IBM Plex Mono, monospace">
+            <text x="100" y="270">max_completion_</text>
+            <text x="100" y="281">tokens</text>
+            <text x="100" y="292">sem temperature</text>
+            <text x="232" y="270">max_tokens</text>
+            <text x="232" y="281">padrão</text>
+            <text x="364" y="270">coding plan</text>
+            <text x="364" y="281">/api/coding/</text>
+            <text x="364" y="292">paas/v4</text>
+          </g>
+          <g text-anchor="middle" font-size="9.5" class="f-seal" opacity=".9" font-family="IBM Plex Mono, monospace">
+            <text x="585" y="270">/v1/messages · x-api-key</text>
+            <text x="585" y="282">blocos, não string</text>
+            <text x="585" y="294">truncar = "max_tokens"</text>
+          </g>
+
+          <text x="20" y="326" font-size="11" opacity=".7">O que cada provedor aceita é declarado no TOML — não descoberto por erro 400 a cada chamada.</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>A declaração por provedor foi consequência de uma medição, não de estilo.</b> Os modelos <code>gpt-5.6</code> recusam <code>max_tokens</code> e recusam <code>temperature</code> diferente de 1. Um heurístico corrigia isso sozinho, o que fazia toda chamada à OpenAI gastar três idas-e-voltas — visível como <code>attempts=3</code> nos registros salvos. Declarando, passou a uma.</figcaption>
+  </figure>
+</section>
+
+<!-- ============ 5. O QUE SAI ============ -->
+<section>
+  <div class="col">
+    <span class="stage-tag">Saída</span>
+    <h2>O produto não é a síntese</h2>
+    <p>A resposta final é a parte previsível. O que perguntar a um modelo só não entrega é a tabela abaixo — e, principalmente, o aviso quando ela não tem topo claro.</p>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>conselheiro</th><th>score Borda</th><th>posições</th><th>dispersão</th><th>leitura</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">gpt</td><td class="num">1.00</td><td class="num">[1, 1]</td><td class="num">0.0</td><td>primeiro em todas as cédulas</td></tr>
+        <tr><td class="mono">claude</td><td class="num">0.50</td><td class="num">[1, 2]</td><td class="num">0.5</td><td>avaliadores discordaram sobre ele</td></tr>
+        <tr><td class="mono">deepseek</td><td class="num">0.00</td><td class="num">[2, 2]</td><td class="num">0.0</td><td>último por unanimidade</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="col">
+    <p>A coluna de <strong>dispersão</strong> é a que carrega informação que a média esconde: score 0.50 com dispersão 0.5 significa que os avaliadores não convergiram, e não que a resposta foi mediana. Quando o topo não tem folga — diferença menor que 0.15, ou dispersão alta — a execução emite <strong>conselho dividido</strong>, e a síntese passa a ser apresentada como uma opção, não como consenso.</p>
+  </div>
+
+  <div class="note">
+    <span class="lbl">Custódia</span>
+    <p>Cada execução grava <code>runs/&lt;data&gt;-&lt;sha12&gt;.json</code> com a pergunta, todos os prompts enviados, as respostas cruas, cada cédula com seu mapa de rótulos, a seed do embaralhamento e o <code>sha256</code> do próprio registro. Fixando a seed no TOML, a rodada é reconstituível. É o que permite auditar depois <em>por que</em> o conselho decidiu assim, e não só o que ele decidiu.</p>
+  </div>
+</section>
+
+<!-- ============ 6. LIMITES ============ -->
+<section>
+  <div class="col">
+    <span class="stage-tag">Limites declarados</span>
+    <h2>O que este desenho não faz</h2>
+    <ul>
+      <li><strong>O cegamento é bom, não perfeito.</strong> A máscara pega marcas conhecidas de autoria. Estilo de escrita, idioma preferido e formatação característica continuam identificando o autor para um avaliador atento.</li>
+      <li><strong>Os quatro modelos não são independentes de verdade.</strong> Treinam sobre corpora sobrepostos. Concordância entre eles reduz o risco de erro idiossincrático, mas não corrige erro que a literatura inteira compartilha.</li>
+      <li><strong>A pergunta precisa ser autocontida.</strong> O conselho não vê seu repositório, seus arquivos nem a conversa em que a pergunta nasceu — o que é justamente o que o torna um produtor cego, e também o que limita o que ele consegue julgar.</li>
+      <li><strong>Perguntar publica.</strong> Cada execução envia o texto da pergunta a quatro provedores externos simultaneamente. Para conteúdo privado isso é uma decisão, não um detalhe de operação.</li>
+      <li><strong>Latência é estrutural.</strong> Três estágios sequenciais, com o estágio 2 esperando o estágio 1 inteiro. Uma pergunta densa leva de 90 segundos a 8 minutos; <code>--no-rank</code> corta o estágio 2 e aproximadamente metade do custo.</li>
+    </ul>
+  </div>
+</section>
+
+<footer>
+  <div class="col">
+    <p>Mapa gerado a partir do código em <code>~/llm-council</code>. Os números de consenso vêm de execuções reais registradas em <code>runs/</code>; as contagens de linha, dos módulos em <code>council/</code>.</p>
+  </div>
+</footer>
+
+</div>
