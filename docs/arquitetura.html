@@ -147,11 +147,11 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
   <p class="lede">Quatro modelos de provedores diferentes respondem à mesma pergunta, avaliam-se <em>sem saber quem escreveu o quê</em>, e um presidente que não é membro do conselho sintetiza o resultado.</p>
 
   <dl class="facts">
-    <div class="fact"><dt>Módulos</dt><dd>7</dd></div>
-    <div class="fact"><dt>Linhas</dt><dd>1 720</dd></div>
+    <div class="fact"><dt>Módulos</dt><dd>8</dd></div>
+    <div class="fact"><dt>Linhas</dt><dd>1 881</dd></div>
     <div class="fact"><dt>Dependências</dt><dd>1 (SDK anthropic)</dd></div>
     <div class="fact"><dt>Conselheiros</dt><dd>4 + presidente</dd></div>
-    <div class="fact"><dt>Checagens</dt><dd>67 offline</dd></div>
+    <div class="fact"><dt>Checagens</dt><dd>88 offline</dd></div>
   </dl>
 </header>
 
@@ -292,7 +292,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
           <text x="560" y="604" text-anchor="middle" font-weight="500" class="f-seal">registro selado</text>
           <text x="560" y="619" text-anchor="middle" font-size="10" class="f-seal" opacity=".85" font-family="IBM Plex Mono, monospace">runs/…-sha256.json</text>
 
-          <text x="380" y="662" text-anchor="middle" font-size="11" opacity=".7">o registro guarda prompts, respostas, cédulas, mapa de rótulos e a seed</text>
+          <text x="380" y="662" text-anchor="middle" font-size="11" opacity=".7">o registro guarda respostas, cédulas, mapa de rótulos, seed e o selo do produtor</text>
         </g>
       </svg>
     </div>
@@ -390,8 +390,8 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
 <section>
   <div class="col">
     <span class="stage-tag">Código</span>
-    <h2>Sete módulos, um só que amarra</h2>
-    <p>A dependência interna é um DAG raso e deliberado. Três módulos não importam nada de dentro do projeto — são testáveis sem rede, sem config e sem mock. O <code>engine</code> é o único lugar onde tudo se encontra.</p>
+    <h2>Oito módulos, um só que amarra</h2>
+    <p>A dependência interna é um DAG raso e deliberado. Quatro módulos não importam nada de dentro do projeto — são testáveis sem rede, sem config e sem mock. O <code>engine</code> é o único lugar onde tudo se encontra.</p>
   </div>
 
   <figure>
@@ -454,11 +454,11 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
           <path d="M 220 282 C 320 336, 560 336, 660 300" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ah2)"/>
           <text x="440" y="340" text-anchor="middle" font-size="10.5" opacity=".7">config monta o Endpoint certo para cada provedor</text>
 
-          <text x="20" y="372" font-size="11" opacity=".7">prompts, ranking e providers não importam nada do projeto — testáveis isoladamente, sem rede.</text>
+          <text x="20" y="372" font-size="11" opacity=".7">prompts, ranking, providers e provenance não importam nada do projeto — testáveis isoladamente.</text>
         </g>
       </svg>
     </div>
-    <figcaption><b>A direção das setas é a razão de o teste offline existir sem mock de rede.</b> <code>ranking.py</code> concentra cegamento, parsing de cédula e Borda sem conhecer provedor, config ou HTTP — as 67 checagens exercitam a lógica que decide o resultado sem tocar em nenhuma API.</figcaption>
+    <figcaption><b>A direção das setas é a razão de o teste offline existir sem mock de rede.</b> <code>ranking.py</code> concentra cegamento, parsing de cédula e Borda sem conhecer provedor, config ou HTTP — as 88 checagens exercitam a lógica que decide o resultado sem tocar em nenhuma API.</figcaption>
   </figure>
 
   <div class="tbl-wrap">
@@ -472,6 +472,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
         <tr><td class="mono">mcp_server.py</td><td>Servidor MCP stdio escrito à mão, sem dependência.</td><td class="num">215</td></tr>
         <tr><td class="mono">config.py</td><td>Carrega TOML e <code>.env</code>, valida o roster, monta endpoints.</td><td class="num">175</td></tr>
         <tr><td class="mono">prompts.py</td><td>Os dois prompts que você vai querer editar, isolados de propósito.</td><td class="num">96</td></tr>
+        <tr><td class="mono">provenance.py</td><td>Sela no registro o commit, o hash do fonte e o retrato da config que o produziram.</td><td class="num">127</td></tr>
       </tbody>
     </table>
   </div>
@@ -588,7 +589,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
 
   <div class="note">
     <span class="lbl">Custódia</span>
-    <p>Cada execução grava <code>runs/&lt;data&gt;-&lt;sha12&gt;.json</code> com a pergunta, todos os prompts enviados, as respostas cruas, cada cédula com seu mapa de rótulos, a seed do embaralhamento e o <code>sha256</code> do próprio registro. A seed fixa o embaralhamento dos rótulos, não a saída dos modelos — o registro é <em>inspecionável</em>, não reproduzível: rodar de novo com a mesma seed dá outras respostas. O que ele permite é auditar depois por que o conselho decidiu assim, e não só o que decidiu.</p>
+    <p>Cada execução grava <code>runs/&lt;data&gt;-&lt;sha12&gt;.json</code> com a pergunta, as respostas cruas, cada cédula com seu mapa de rótulos, a seed do embaralhamento, o <code>sha256</code> do próprio registro — e o <strong>selo do produtor</strong>: o commit do council, se a árvore estava suja, um hash de todo o fonte do pacote e outro da config resolvida. Os prompts não são guardados em texto: com o código endereçado por hash e as respostas gravadas, eles são reconstituíveis, e guardá-los inflaria o registro cerca de doze vezes. A seed fixa o embaralhamento dos rótulos, não a saída dos modelos — o registro é <em>inspecionável</em>, não reproduzível: rodar de novo com a mesma seed dá outras respostas. O que ele permite é auditar depois por que o conselho decidiu assim — e, com o selo, saber se o código que produziu aquele registro ainda é o que está na árvore. <code>council show</code> compara e avisa quando divergem.</p>
   </div>
 </section>
 

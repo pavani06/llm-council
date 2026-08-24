@@ -64,8 +64,12 @@ dividido, e isso é dito na saída em vez de escondido atrás de uma síntese co
 **Estágio 3** — o presidente fica **fora** do conselho e recebe as respostas + a tabela agregada com
 o ponto forte e a falha que cada avaliador apontou — não o texto cru dos rankings.
 
-**Registro** — cada execução vira `runs/<data>-<sha>.json` com prompts, respostas, cédulas, mapa de
-rótulos, seed e `sha256` do registro. Fixe `seed` no TOML para reproduzir uma rodada.
+**Registro** — cada execução vira `runs/<data>-<sha>.json` com respostas, cédulas, mapa de rótulos,
+seed, `sha256` do registro e o **selo do produtor**: commit do council, se a árvore estava suja,
+hash de todo o fonte do pacote e hash da config resolvida. `council show` compara o selo com a
+árvore atual e avisa quando divergem — sem isso, um registro antigo é ininterpretável depois de
+qualquer edição em `prompts.py` ou no roster. Os prompts não são guardados em texto: são
+reconstituíveis a partir do código selado mais as respostas.
 
 **Falhas** — provedor que cai vira aviso nomeado com o motivo, nunca um silêncio que parece consenso.
 Truncamento por `max_tokens` é detectado e nomeado: modelo de raciocínio (DeepSeek v4-pro, medido em
