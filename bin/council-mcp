@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Launcher do servidor MCP: garante cwd e interpretador certos, venha de onde vier.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+py="$here/.venv/bin/python"
+[ -x "$py" ] || py="python3"
+cd "$here" && exec "$py" -m council.mcp_server "$@"

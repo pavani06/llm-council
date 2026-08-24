@@ -1,7 +1,10 @@
 # council
 
 Vários LLMs de provedores diferentes respondem a mesma pergunta, avaliam-se **às cegas**, e um
-presidente sintetiza. CLI + servidor MCP. **Zero dependências** — só a stdlib do Python 3.11+.
+presidente sintetiza. CLI + servidor MCP.
+
+Stdlib pura para OpenAI, DeepSeek e z.ai. O provedor Anthropic usa o **SDK oficial**
+(`anthropic`) — única dependência, e só ela precisa do venv.
 
 Conselho atual: `gpt-5.6-terra`, `deepseek-v4-pro`, `claude-opus-5`, `glm-5.3` (coding plan);
 presidente `gpt-5.6-sol`, de fora do conselho.
@@ -12,6 +15,11 @@ que de fato cega, agregação por Borda em vez de ranking descartado, e falha nu
 ## Uso
 
 ```bash
+# venv só por causa do SDK anthropic (o Debian aqui não traz ensurepip):
+python3 -m venv --without-pip .venv
+curl -sS https://bootstrap.pypa.io/get-pip.py | .venv/bin/python
+.venv/bin/python -m pip install -r requirements.txt
+
 cp .env.example .env      # OPENAI_API_KEY / DEEPSEEK_API_KEY / ZAI_API_KEY / CLAUDE_API_KEY
 ./bin/council doctor      # confere chaves, roster e coerência
 ./bin/council models      # ids reais da sua conta em cada provedor
@@ -31,11 +39,11 @@ salva só a resposta.
 ### Como MCP no Claude Code
 
 ```bash
-claude mcp add council -- python3 -m council.mcp_server
+claude mcp add council -- ~/llm-council/bin/council-mcp
 ```
 
 Expõe `council_ask` (só a síntese) e `council_debate` (respostas, consenso, divergências).
-Rode a partir de `~/llm-council`, ou aponte `COUNCIL_CONFIG` para o `council.toml`.
+O launcher resolve cwd e interpretador sozinho, então pode ser chamado de qualquer lugar.
 
 ## O que ele faz diferente
 
@@ -67,9 +75,13 @@ isso se disfarça de "o modelo não seguiu o formato". Ajuste o teto por conselh
 ## Configuração
 
 Tudo em `council.toml`: provedores, roster, presidente e ajustes. Cada provedor declara `api`:
-`openai` (default — vale para OpenAI, DeepSeek e z.ai) ou `anthropic`, que fala a Messages API
-(`/v1/messages`, header `x-api-key`, `max_tokens` obrigatório, **sem `temperature`** — o Opus 5
-devolve 400 se ela vier, e blocos `thinking` são separados do texto). `params` por conselheiro passa campos extras direto no payload. Chaves só via `.env` ou ambiente —
+`openai` (default — vale para OpenAI, DeepSeek e z.ai, todos por stdlib) ou `anthropic`, que passa
+pelo SDK oficial. O SDK cuida de auth, versão de API, retries e tipos de erro; o adaptador cuida do
+que ele não tem como adivinhar: **`temperature` fica fora** (o Opus 5 devolve 400 se ela vier),
+`thinking` fica omitido de propósito (omitir já é adaptativo no Opus 5, e `{type:"adaptive"}`
+quebraria num Haiku 4.5 — quem for para Opus 4.8/4.7 declara em `params`), blocos `thinking` não
+entram na resposta, `stop_reason: "refusal"` vira falha explícita, e truncamento aqui é
+`stop_reason: "max_tokens"`, não `"length"`. `params` por conselheiro passa campos extras direto no payload. Chaves só via `.env` ou ambiente —
 nenhum valor é impresso em lugar nenhum.
 
 **Pegadinha do ambiente:** um `export OPENAI_API_KEY=` vazio no `.bashrc` mascarava a chave real do
@@ -79,5 +91,7 @@ configuração, é ruído.
 ## Testes
 
 ```bash
-python3 test_offline.py    # ponta a ponta, sem rede
+.venv/bin/python test_offline.py   # ponta a ponta, sem rede (53+ checagens)
 ```
+
+Roda também no python do sistema; as checagens que exigem o SDK são puladas com aviso.

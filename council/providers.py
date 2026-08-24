@@ -42,10 +42,12 @@ class Reply:
     latency_s: float = 0.0
     attempts: int = 1
     finish: str = ""
+    request_id: str = ""
 
     @property
     def truncated(self) -> bool:
-        return self.finish == "length"
+        # 'length' nos OpenAI-compativeis, 'max_tokens' na Messages API da Anthropic.
+        return self.finish in ("length", "max_tokens")
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -57,6 +59,7 @@ class Reply:
             "latency_s": round(self.latency_s, 2),
             "attempts": self.attempts,
             "finish": self.finish,
+            "request_id": self.request_id,
         }
 
 
@@ -271,30 +274,40 @@ def _drop_offending_param(payload: dict, body: str) -> str | None:
 
 
 class AnthropicEndpoint(Endpoint):
-    """Anthropic Messages API (/v1/messages) — nao e OpenAI-compativel.
+    """Anthropic Messages API pelo SDK oficial (`anthropic`).
 
-    Diferencas que importam e que o adaptador resolve:
-    - auth por header 'x-api-key' + 'anthropic-version', nao Bearer;
-    - 'max_tokens' e obrigatorio;
-    - 'temperature' foi REMOVIDA nos modelos atuais (Opus 5, Sonnet 5, 4.7/4.8):
-      manda-la devolve 400, entao so vai se o operador pedir em [params];
-    - a resposta e uma lista de blocos; os de 'thinking' vem junto e nao sao texto;
-    - 'stop_reason: refusal' e HTTP 200 — precisa virar falha explicita, nao resposta vazia.
+    Unico provedor com dependencia externa; os outros tres seguem stdlib pura.
+    O SDK cuida de auth, versionamento de API, retries com backoff e tipos de erro —
+    nao reimplementar nada disso aqui.
+
+    O que ainda precisa de cuidado nosso:
+    - `temperature` foi REMOVIDA nos modelos atuais (Opus 5, Sonnet 5, 4.7/4.8): mandar
+      devolve 400. So vai se o operador pedir explicitamente em [params].
+    - `thinking` fica omitido de proposito: no Opus 5 omitir ja significa adaptativo, e
+      mandar `{type: "adaptive"}` quebraria num modelo antigo como o Haiku 4.5. Quem
+      trocar para Opus 4.8/4.7 (onde omitir = sem raciocinio) declara em [params].
+    - a resposta e uma lista de blocos; `thinking` nao e texto de resposta.
+    - `stop_reason: "refusal"` chega como sucesso HTTP e precisa virar falha explicita.
+    - truncamento aqui e `stop_reason: "max_tokens"`, nao "length".
     """
 
-    ANTHROPIC_VERSION = "2023-06-01"
-
-    def _headers(self) -> dict[str, str]:
-        h = {
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-            "User-Agent": USER_AGENT,
-            "anthropic-version": self.ANTHROPIC_VERSION,
-        }
+    def _client(self, timeout: float, retries: int):
+        try:
+            import anthropic
+        except ImportError:
+            raise ProviderError(
+                None,
+                "SDK 'anthropic' ausente. Instale no venv do projeto: "
+                ".venv/bin/python -m pip install anthropic",
+            ) from None
+        kwargs: dict[str, Any] = {"timeout": timeout, "max_retries": retries}
         if self.api_key:
-            h["x-api-key"] = self.api_key
-        h.update(self.extra_headers)
-        return h
+            kwargs["api_key"] = self.api_key
+        if self.base_url:
+            kwargs["base_url"] = self.base_url
+        if self.extra_headers:
+            kwargs["default_headers"] = self.extra_headers
+        return anthropic.Anthropic(**kwargs)
 
     @staticmethod
     def _split(messages: list[dict[str, str]]) -> tuple[str | None, list[dict[str, str]]]:
@@ -307,18 +320,17 @@ class AnthropicEndpoint(Endpoint):
                 turns.append({"role": m["role"], "content": m["content"]})
         return system, turns
 
-    def _payload(self, model, messages, max_tokens, temperature, params) -> dict[str, Any]:
+    def _build(self, model, messages, max_tokens, params) -> dict[str, Any]:
         system, turns = self._split(messages)
-        payload: dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "model": model,
             "max_tokens": max_tokens or 4096,  # obrigatorio na Messages API
             "messages": turns,
         }
         if system:
-            payload["system"] = system
-        # temperature so entra por pedido explicito em [params] — ver docstring.
-        payload.update(params or {})
-        return payload
+            kwargs["system"] = system
+        kwargs.update(params or {})  # temperature/thinking entram so por aqui
+        return kwargs
 
     def chat(
         self,
@@ -331,23 +343,15 @@ class AnthropicEndpoint(Endpoint):
         retries: int = 2,
         params: dict[str, Any] | None = None,
     ) -> Reply:
-        payload = self._payload(model, messages, max_tokens, temperature, params)
         started = time.monotonic()
-        attempt = 0
-        last = ""
-        while attempt <= retries:
-            attempt += 1
-            try:
-                resp = self._request("/v1/messages", payload, timeout)
-                return self._parse_anthropic(json.loads(resp.read().decode()), started, attempt)
-            except ProviderError as e:
-                last = str(e)
-                if e.status is not None and e.status not in RETRY_STATUS:
-                    break
-                if attempt <= retries:
-                    time.sleep(min(2 ** attempt, 8))
-        return Reply(ok=False, error=last or "falha desconhecida",
-                     latency_s=time.monotonic() - started, attempts=attempt)
+        try:
+            client = self._client(timeout, retries)
+            resp = client.messages.create(**self._build(model, messages, max_tokens, params))
+        except ProviderError as e:
+            return Reply(ok=False, error=str(e), latency_s=time.monotonic() - started)
+        except Exception as e:
+            return Reply(ok=False, error=self._describe(e), latency_s=time.monotonic() - started)
+        return self._parse_sdk(resp, started)
 
     def stream(
         self,
@@ -359,53 +363,72 @@ class AnthropicEndpoint(Endpoint):
         timeout: float = 180.0,
         params: dict[str, Any] | None = None,
     ) -> Iterator[str]:
-        payload = self._payload(model, messages, max_tokens, temperature, params)
-        payload["stream"] = True
         try:
-            resp = self._request("/v1/messages", payload, timeout)
+            client = self._client(timeout, 2)
+            with client.messages.stream(**self._build(model, messages, max_tokens, params)) as s:
+                yield from s.text_stream
         except ProviderError as e:
             yield f"[erro: {e}]"
-            return
-        for raw in resp:
-            line = raw.decode("utf-8", "replace").strip()
-            if not line.startswith("data:"):
-                continue
-            try:
-                ev = json.loads(line[5:].strip())
-            except json.JSONDecodeError:
-                continue
-            if ev.get("type") == "content_block_delta":
-                delta = ev.get("delta") or {}
-                if delta.get("type") == "text_delta" and delta.get("text"):
-                    yield delta["text"]
+        except Exception as e:
+            yield f"[erro: {self._describe(e)}]"
 
     def list_models(self, timeout: float = 30.0) -> list[str]:
-        resp = self._request("/v1/models", None, timeout, method="GET")
-        data = json.loads(resp.read().decode())
-        return sorted(m["id"] for m in data.get("data", []) if m.get("id"))
+        client = self._client(timeout, 1)
+        return sorted(m.id for m in client.models.list())
 
     @staticmethod
-    def _parse_anthropic(body: dict, started: float, attempt: int) -> Reply:
-        u = body.get("usage") or {}
-        usage = Usage(
-            prompt_tokens=int(u.get("input_tokens") or 0),
-            completion_tokens=int(u.get("output_tokens") or 0),
-        )
-        stop = body.get("stop_reason")
-        if stop == "refusal":
-            det = body.get("stop_details") or {}
-            return Reply(ok=False, usage=usage, latency_s=time.monotonic() - started, attempts=attempt,
-                         error=f"recusa do modelo (categoria={det.get('category')}): {det.get('explanation')}")
+    def _describe(e: Exception) -> str:
+        """Cadeia do mais especifico para o mais generico — um except largo perderia
+        a diferenca entre o que adianta repetir e o que nao adianta."""
+        try:
+            import anthropic
+        except ImportError:
+            return f"{type(e).__name__}: {e}"
+        if isinstance(e, anthropic.NotFoundError):
+            return f"modelo ou rota inexistente: {e}"
+        if isinstance(e, anthropic.AuthenticationError):
+            return "chave recusada (CLAUDE_API_KEY)"
+        if isinstance(e, anthropic.PermissionDeniedError):
+            return "chave sem permissao para este recurso"
+        if isinstance(e, anthropic.RateLimitError):
+            return f"rate limit persistiu apos os retries do SDK: {e}"
+        if isinstance(e, anthropic.APIStatusError):
+            return f"HTTP {e.status_code}: {getattr(e, 'message', e)}"
+        if isinstance(e, anthropic.APIConnectionError):
+            return f"falha de conexao: {e}"
+        return f"{type(e).__name__}: {e}"
 
-        blocks = body.get("content") or []
-        text = "\n".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
-        thinking = "\n".join(b.get("thinking", "") for b in blocks if b.get("type") == "thinking").strip()
+    @staticmethod
+    def _parse_sdk(resp: Any, started: float) -> Reply:
+        u = getattr(resp, "usage", None)
+        usage = Usage(
+            prompt_tokens=int(getattr(u, "input_tokens", 0) or 0),
+            completion_tokens=int(getattr(u, "output_tokens", 0) or 0),
+        )
+        rid = getattr(resp, "_request_id", "") or ""
+        stop = getattr(resp, "stop_reason", "") or ""
+        elapsed = time.monotonic() - started
+
+        if stop == "refusal":
+            det = getattr(resp, "stop_details", None)
+            cat = getattr(det, "category", None)
+            exp = getattr(det, "explanation", None)
+            return Reply(ok=False, usage=usage, finish=stop, request_id=rid, latency_s=elapsed,
+                         error=f"recusa do modelo (categoria={cat}): {exp}")
+
+        blocks = getattr(resp, "content", None) or []
+        text = "\n".join(b.text for b in blocks if getattr(b, "type", "") == "text").strip()
+        thinking = "\n".join(
+            getattr(b, "thinking", "") or "" for b in blocks if getattr(b, "type", "") == "thinking"
+        ).strip()
+
         if not text:
-            return Reply(ok=False, usage=usage, reasoning=thinking, finish=stop or "",
-                         latency_s=time.monotonic() - started, attempts=attempt,
-                         error=f"sem bloco de texto na resposta (stop_reason={stop})")
-        return Reply(ok=True, content=text, reasoning=thinking, usage=usage,
-                     finish=stop or "", latency_s=time.monotonic() - started, attempts=attempt)
+            extra = " — o teto foi consumido antes de sair texto" if stop == "max_tokens" else ""
+            return Reply(ok=False, usage=usage, reasoning=thinking, finish=stop, request_id=rid,
+                         latency_s=elapsed, error=f"sem bloco de texto (stop_reason={stop}){extra}")
+
+        return Reply(ok=True, content=text, reasoning=thinking, usage=usage, finish=stop,
+                     request_id=rid, latency_s=elapsed)
 
 
 ENDPOINT_TYPES = {"openai": Endpoint, "anthropic": AnthropicEndpoint}

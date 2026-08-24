@@ -104,6 +104,19 @@ def cmd_doctor(args) -> int:
         key_env = cfg.key_env_for(name)
         ok = cfg.has_key(name)
         print(f"  {name:<10} {key_env:<22} {'chave presente' if ok else 'SEM CHAVE'}")
+    faltando = []
+    for name, spec in sorted(cfg.providers.items()):
+        if spec.get("api") == "anthropic" and cfg.has_key(name):
+            try:
+                import anthropic  # noqa: F401
+            except ImportError:
+                faltando.append(name)
+    if faltando:
+        print()
+        print(f"  provedor(es) {faltando} exigem o SDK 'anthropic', ausente neste interpretador.")
+        print("  instale:  .venv/bin/python -m pip install -r requirements.txt")
+        print("  (use ./bin/council, que prefere o venv do projeto)")
+
     print()
     print("conselho")
     active = {m.name for m in cfg.active_members()}

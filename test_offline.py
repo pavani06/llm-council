@@ -163,33 +163,55 @@ def main():
     check(any("estagio 2 pulado" in w for w in rec3.warnings),
           f"limiar: com 2 conselheiros o estagio 2 e pulado ({rec3.warnings})")
 
-    print("10) adaptador Anthropic (Messages API)")
-    ep = AnthropicEndpoint("anthropic", "https://api.anthropic.com", "chave-falsa")
-    h = ep._headers()
-    check("x-api-key" in h and "Authorization" not in h, "usa x-api-key, nao Bearer")
-    check(h.get("anthropic-version") == "2023-06-01", "manda anthropic-version")
-    pay = ep._payload("claude-opus-5",
-                      [{"role": "system", "content": "SYS"}, {"role": "user", "content": "oi"}],
-                      4096, 0.3, None)
-    check("temperature" not in pay, "NAO manda temperature (Opus 5 devolve 400 se vier)")
-    check(pay.get("max_tokens") == 4096, "max_tokens presente (obrigatorio na Messages API)")
-    check(pay.get("system") == "SYS" and len(pay["messages"]) == 1,
-          "system sai do array de mensagens para o campo proprio")
-    pay2 = ep._payload("claude-opus-5", [{"role": "user", "content": "oi"}], 4096, 0.3,
-                       {"temperature": 1.0})
-    check(pay2.get("temperature") == 1.0, "temperature entra se o operador pedir em [params]")
+    print("10) adaptador Anthropic (SDK oficial)")
+    from types import SimpleNamespace as NS
 
-    corpo = {"content": [{"type": "thinking", "thinking": "hmm"},
-                         {"type": "text", "text": "resposta"}],
-             "usage": {"input_tokens": 7, "output_tokens": 3}, "stop_reason": "end_turn"}
-    r = AnthropicEndpoint._parse_anthropic(corpo, 0.0, 1)
+    ep = AnthropicEndpoint("anthropic", "https://api.anthropic.com", "chave-falsa")
+    kw = ep._build("claude-opus-5",
+                   [{"role": "system", "content": "SYS"}, {"role": "user", "content": "oi"}],
+                   4096, None)
+    check("temperature" not in kw, "NAO manda temperature (Opus 5 devolve 400 se vier)")
+    check("thinking" not in kw, "NAO manda thinking (omitir = adaptativo no Opus 5)")
+    check(kw.get("max_tokens") == 4096, "max_tokens presente (obrigatorio na Messages API)")
+    check(kw.get("system") == "SYS" and len(kw["messages"]) == 1,
+          "system sai do array de mensagens para o campo proprio")
+    kw2 = ep._build("claude-opus-5", [{"role": "user", "content": "oi"}], 4096,
+                    {"temperature": 1.0, "thinking": {"type": "adaptive"}})
+    check(kw2.get("temperature") == 1.0 and kw2.get("thinking"),
+          "temperature/thinking entram se o operador pedir em [params]")
+
+    resp = NS(content=[NS(type="thinking", thinking="hmm"), NS(type="text", text="resposta")],
+              usage=NS(input_tokens=7, output_tokens=3), stop_reason="end_turn",
+              _request_id="req_123")
+    r = AnthropicEndpoint._parse_sdk(resp, 0.0)
     check(r.ok and r.content == "resposta", "extrai so o bloco de texto")
     check(r.reasoning == "hmm", "guarda o thinking separado, fora da resposta")
     check(r.usage.prompt_tokens == 7 and r.usage.completion_tokens == 3, "mapeia input/output_tokens")
-    rec_ = AnthropicEndpoint._parse_anthropic(
-        {"stop_reason": "refusal", "stop_details": {"category": "cyber", "explanation": "nao"},
-         "content": [], "usage": {}}, 0.0, 1)
-    check(not rec_.ok and "recusa" in rec_.error, f"recusa (HTTP 200) vira falha explicita: {rec_.error}")
+    check(r.request_id == "req_123", "guarda o request_id para suporte")
+
+    recusa = AnthropicEndpoint._parse_sdk(
+        NS(content=[], usage=NS(input_tokens=1, output_tokens=0), stop_reason="refusal",
+           stop_details=NS(category="cyber", explanation="nao"), _request_id=""), 0.0)
+    check(not recusa.ok and "recusa" in recusa.error,
+          f"recusa (sucesso HTTP) vira falha explicita: {recusa.error}")
+
+    trunc = AnthropicEndpoint._parse_sdk(
+        NS(content=[NS(type="text", text="parcial")], usage=NS(input_tokens=1, output_tokens=9),
+           stop_reason="max_tokens", _request_id=""), 0.0)
+    check(trunc.ok and trunc.truncated,
+          "stop_reason='max_tokens' e reconhecido como truncamento (nao 'length')")
+    check(Reply(ok=True, finish="length").truncated, "'length' segue valendo nos OpenAI-compativeis")
+    check(not Reply(ok=True, finish="stop").truncated, "'stop' nao e truncamento")
+
+    try:
+        import anthropic as _a
+        cli = ep._client(30.0, 2)
+        check(type(cli).__name__ == "Anthropic", "monta o cliente do SDK oficial")
+        check(cli.api_key == "chave-falsa", "chave chega ao cliente")
+        check(AnthropicEndpoint._describe(_a.NotFoundError.__new__(_a.NotFoundError)).startswith("modelo"),
+              "erros tipados viram mensagem especifica")
+    except ImportError:
+        print("  pulado  SDK anthropic ausente neste interpretador (rode com .venv/bin/python)")
 
     print()
     if FALHAS:

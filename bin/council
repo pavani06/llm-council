@@ -1,2 +1,7 @@
 #!/usr/bin/env bash
-exec python3 -m council "$@"
+# Prefere o venv do projeto (onde vive o SDK anthropic); cai no python do sistema
+# se ele nao existir — os outros tres provedores nao precisam de dependencia.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+py="$here/.venv/bin/python"
+[ -x "$py" ] || py="python3"
+cd "$here" && exec "$py" -m council "$@"
