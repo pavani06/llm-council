@@ -314,6 +314,82 @@ def main():
     r2 = _dc.replace(rec, producer={**rec.producer, "code_sha256": "1" * 64})
     check(r2.digest() != rec.digest(), "mudar o selo muda o sha256 do registro")
 
+    print("13) julgamento cego A/B do operador")
+    import random as _rnd, shutil as _sh, tempfile as _tmp
+    from council import judgment as jd
+
+    rec_falso = {
+        "sha256": "a" * 64,
+        "question": "Como acelerar a query?",
+        "members": [{"name": "gpt", "provider": "openai", "model": "gpt-5.6-terra"},
+                    {"name": "claude", "provider": "anthropic", "model": "claude-opus-5"},
+                    {"name": "glm", "provider": "zai", "model": "glm-5.3"}],
+        "stage1": [
+            {"name": "gpt", "ok": True, "content": "Eu, o ChatGPT da OpenAI, sugiro indice."},
+            {"name": "claude", "ok": True, "content": "Como Claude, da Anthropic, sugiro EXPLAIN."},
+            {"name": "glm", "ok": False, "content": ""},
+        ],
+        "consensus": [{"member": "claude", "score": 0.9, "ballots": 2},
+                      {"member": "gpt", "score": 0.4, "ballots": 2},
+                      {"member": "glm", "score": 0.0, "ballots": 0}],
+    }
+
+    a, b, motivo = jd.escolher_par(rec_falso)
+    check((a, b) == ("claude", "gpt"), f"par padrao = os dois primeiros do consenso ({a},{b})")
+    check("margem" in motivo, "e diz por que esse par")
+    try:
+        jd.escolher_par(rec_falso, "gpt,glm")
+        check(False, "par com resposta invalida deveria ser recusado")
+    except jd.SemPar as e:
+        check("glm" in str(e), f"recusa par com resposta que falhou ({e})")
+
+    ops, mapa = jd.cegar(rec_falso, ("gpt", "claude"), _rnd.Random(7))
+    juntos = " ".join(o["texto"] for o in ops)
+    check(not any(t in juntos for t in ("ChatGPT", "OpenAI", "Claude", "Anthropic")),
+          "autoria mascarada no texto apresentado")
+    check(juntos.count("[modelo]") >= 4, "a mascara de fato substituiu")
+    check(sorted(mapa.values()) == ["claude", "gpt"], "mapa slot->autor cobre o par")
+    ordens = {tuple(jd.cegar(rec_falso, ("gpt", "claude"), _rnd.Random(i))[1].values()) for i in range(30)}
+    check(len(ordens) == 2, f"a ordem de apresentacao varia entre execucoes ({ordens})")
+
+    check(jd.concorda(rec_falso, "claude", "gpt") is True, "concorda: escolheu o melhor do Borda")
+    check(jd.concorda(rec_falso, "gpt", "claude") is False, "discorda: escolheu o preterido")
+    check(jd.concorda(rec_falso, "gpt", "inexistente") is None, "sem consenso comparavel -> None")
+
+    with _tmp.TemporaryDirectory() as td:
+        base = Path(td)
+        runs, vers = base / "runs", base / "judgments"
+        runs.mkdir()
+        arq = runs / "r.json"
+        arq.write_text(json.dumps(rec_falso, ensure_ascii=False), encoding="utf-8")
+        antes_bytes = arq.read_bytes()
+
+        mapa2 = {"1": "gpt", "2": "claude"}
+        dest, ver = jd.gravar(vers, arq, rec_falso, mapa2, "2", "escolhi pela clareza", {"code_sha256": "z"})
+        check(dest.name == "a" * 12 + "-ab.json", f"veredito endereçado pelo sha do registro ({dest.name})")
+        check(ver["escolhido"] == "claude" and ver["preterido"] == "gpt", "resolve slot -> autor")
+        check(ver["concorda_com_borda"] is True, "computa concordancia com o Borda")
+        check(ver["nota"] == "escolhi pela clareza", "guarda o verbatim do operador")
+        check(len(ver["sha256"]) == 64, "veredito tem sha256 proprio")
+        check(arq.read_bytes() == antes_bytes,
+              "REGISTRO SELADO INTACTO — julgar nao altera o artefato julgado")
+
+        try:
+            jd.gravar(vers, arq, rec_falso, mapa2, "1", "mudei de ideia", {})
+            check(False, "segundo veredito sem --redo deveria ser recusado")
+        except jd.JaJulgado as e:
+            check("--redo" in str(e), f"recusa sobrescrever julgamento em silencio ({str(e)[:60]}…)")
+
+        dest2, ver2 = jd.gravar(vers, arq, rec_falso, mapa2, "1", "mudei de ideia", {}, refazer=True)
+        check(ver2["substitui"] is not None, "com --redo, o veredito anterior fica encadeado")
+        check(ver2["substitui"]["nota"] == "escolhi pela clareza", "e o anterior preserva o verbatim")
+
+        r = jd.apurar(vers)
+        check(r["total"] == 1 and r["decididos"] == 1, f"apuracao conta o veredito ({r['total']})")
+        check(r["taxa"] == 0.0, f"escolha 1 (gpt) discorda do Borda -> taxa 0.0 ({r['taxa']})")
+        _sh.rmtree(vers, ignore_errors=True)
+        check(jd.apurar(vers)["taxa"] is None, "sem vereditos, taxa e None e nao zero")
+
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")

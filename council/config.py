@@ -71,6 +71,7 @@ class Settings:
     scrub_identity: bool = True
     identity_terms: list[str] = field(default_factory=list)
     runs_dir: str = "runs"
+    judgments_dir: str = "judgments"
 
 
 @dataclass

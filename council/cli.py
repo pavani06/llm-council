@@ -225,6 +225,127 @@ def cmd_show(args) -> int:
     return 0
 
 
+# ----------------------------------------------------------------------- ab
+
+
+def _dir_de(cfg, nome: str) -> Path:
+    d = Path(getattr(cfg.settings, nome))
+    return d if d.is_absolute() else cfg.source.parent / d
+
+
+def cmd_ab(args) -> int:
+    """Julgamento cego do operador: duas respostas, sem autoria, sem consenso."""
+    import random as _random
+
+    from . import judgment as jd
+    from . import provenance
+
+    cfg = cfgmod.load(Path(args.config) if args.config else None)
+    try:
+        caminho, rec = jd.carregar(_dir_de(cfg, "runs_dir"), args.sha)
+        a, b, motivo = jd.escolher_par(rec, args.par)
+        opcoes, slot_para_membro = jd.cegar(rec, (a, b), _random.SystemRandom())
+    except jd.SemPar as e:
+        _err(f"{e}")
+        return 2
+
+    print(f"{BOLD}registro{RESET} {caminho.name}  ·  sha {rec.get('sha256','')[:12]}")
+    print(f"{DIM}{motivo}{RESET}")
+    print()
+    print(f"{BOLD}pergunta{RESET}")
+    for linha in rec.get("question", "").strip().splitlines():
+        print(f"  {linha}")
+    print()
+
+    for op in opcoes:
+        print(f"{BOLD}{'─' * 72}{RESET}")
+        print(f"{BOLD}OPÇÃO {op['slot']}{RESET}")
+        print(f"{BOLD}{'─' * 72}{RESET}")
+        print(op["texto"].strip())
+        print()
+    print(f"{BOLD}{'─' * 72}{RESET}")
+    print(f"{DIM}autoria e consenso ficam ocultos até você escolher{RESET}")
+    print()
+
+    escolha = args.choose
+    if escolha is None:
+        try:
+            escolha = input("sua escolha [1 / 2 / empate / nenhuma]: ").strip().lower()
+        except EOFError:
+            _err("\nsem terminal interativo — use --choose 1|2|empate|nenhuma")
+            return 2
+    if escolha not in jd.ESCOLHAS:
+        _err(f"escolha inválida: {escolha!r} (use {', '.join(jd.ESCOLHAS)})")
+        return 2
+
+    nota = args.note
+    if nota is None and args.choose is None:
+        try:
+            nota = input("por quê? (opcional, vai verbatim para o registro): ").strip()
+        except EOFError:
+            nota = ""
+    nota = nota or ""
+
+    from . import __version__
+    try:
+        destino, veredito = jd.gravar(
+            _dir_de(cfg, "judgments_dir"), caminho, rec, slot_para_membro,
+            escolha, nota, provenance.seal(cfg, __version__), refazer=args.redo,
+        )
+    except jd.JaJulgado as e:
+        _err(f"\n{e}")
+        return 3
+
+    print()
+    print(f"{BOLD}revelação{RESET}")
+    for slot, membro in sorted(slot_para_membro.items()):
+        score = jd.consenso_de(rec, membro)
+        marca = "  ← sua escolha" if slot == escolha else ""
+        s_txt = f"{score:.2f}" if score is not None else "  -"
+        print(f"  opção {slot}: {membro:<12} consenso {s_txt}{marca}")
+
+    conc = veredito["concorda_com_borda"]
+    print()
+    if conc is True:
+        print(f"  {BOLD}você e o conselho concordaram.{RESET}")
+    elif conc is False:
+        print(f"  {BOLD}você discordou do conselho.{RESET} O Borda pôs o outro na frente.")
+    else:
+        print(f"  {DIM}sem comparação: empate no consenso, ou escolha sem lado.{RESET}")
+    print(f"{DIM}veredito em {destino.name} · endereça o registro por sha256 · o registro não foi alterado{RESET}")
+    return 0
+
+
+def cmd_agreement(args) -> int:
+    """Quantas vezes o julgamento cego do operador bateu com o Borda."""
+    from . import judgment as jd
+
+    cfg = cfgmod.load(Path(args.config) if args.config else None)
+    r = jd.apurar(_dir_de(cfg, "judgments_dir"))
+
+    if not r["total"]:
+        print("nenhum veredito ainda. Rode: council ab")
+        return 1
+
+    print(f"vereditos            {r['total']}")
+    print(f"comparáveis          {r['decididos']}")
+    print(f"empates/abstenções   {r['empates_ou_abstencoes']}")
+    if r["taxa"] is None:
+        print("\nnenhum veredito comparável — nada a concluir.")
+        return 0
+    print(f"concordância         {r['acordos']}/{r['decididos']}  ({r['taxa'] * 100:.0f}%)")
+    print()
+    if r["decididos"] < 10:
+        print(f"{DIM}n={r['decididos']} é pequeno demais para concluir qualquer coisa sobre o Borda.{RESET}")
+        print(f"{DIM}Este número só começa a dizer algo com algumas dezenas de julgamentos.{RESET}")
+    if args.list:
+        print()
+        for v in r["vereditos"]:
+            sinal = {True: "concorda", False: "DISCORDA", None: "-"}[v.get("concorda_com_borda")]
+            print(f"  {v['registro_sha256'][:12]}  {v['escolha']:<8} {sinal:<9} {v['pergunta'][:56]}")
+    return 0
+
+
 # --------------------------------------------------------------------- main
 
 
@@ -248,6 +369,19 @@ def build_parser() -> argparse.ArgumentParser:
     m = sub.add_parser("models", help="lista modelos reais de cada provedor")
     m.add_argument("provider", nargs="?", help="limita a um provedor")
     m.set_defaults(func=cmd_models)
+
+    ab = sub.add_parser("ab", help="julgamento cego seu: duas respostas, sem autoria")
+    ab.add_argument("sha", nargs="?", help="prefixo do sha256 do registro; sem isso, o mais recente")
+    ab.add_argument("--par", help="dois conselheiros por nome, separados por virgula")
+    ab.add_argument("--choose", choices=["1", "2", "empate", "nenhuma"], help="nao interativo")
+    ab.add_argument("--note", help="seu verbatim sobre a escolha")
+    ab.add_argument("--redo", action="store_true",
+                    help="substitui um veredito existente; o anterior fica encadeado dentro do novo")
+    ab.set_defaults(func=cmd_ab)
+
+    ag = sub.add_parser("agreement", help="taxa de concordancia entre voce e o Borda")
+    ag.add_argument("--list", action="store_true", help="lista veredito a veredito")
+    ag.set_defaults(func=cmd_agreement)
 
     s = sub.add_parser("show", help="mostra um registro salvo")
     s.add_argument("sha", nargs="?", help="prefixo do sha256; sem isso, o mais recente")

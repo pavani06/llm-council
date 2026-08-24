@@ -36,6 +36,22 @@ salva só a resposta.
 ./bin/council show                    # último registro salvo
 ```
 
+### Julgamento cego seu
+
+O conselho afirma qualidade por voto dos pares. Isso nunca foi conferido contra o único juiz que
+decide. `ab` mostra duas respostas de um registro **sem autoria, sem consenso e em ordem sorteada**,
+e só revela depois que você escolhe:
+
+```bash
+./bin/council ab                      # último registro, os dois primeiros do consenso
+./bin/council ab 5f8596 --par gpt,glm # registro e par específicos
+./bin/council agreement --list        # quantas vezes você e o Borda concordaram
+```
+
+O veredito vai para `judgments/<sha12>-ab.json`, endereçado ao `sha256` do registro — que **não é
+alterado**. Julgar de novo o mesmo registro exige `--redo`, e o veredito anterior fica encadeado
+dentro do novo: um julgamento seu nunca some em silêncio.
+
 ### Como MCP no Claude Code
 
 ```bash
