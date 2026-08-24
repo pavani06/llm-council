@@ -23,7 +23,7 @@ Criterios, nesta ordem de peso:
 4. Utilidade concreta: o leitor consegue agir.
 Extensao, fluencia e formatacao nao contam. Penalize resposta longa que diz pouco.
 
-Escreva primeiro a sua analise livre. Depois termine com EXATAMENTE estes dois blocos:
+Escreva primeiro a sua analise livre. Depois termine com EXATAMENTE estes dois blocos.\nOs dois cabecalhos vao em ingles, literalmente 'VERDICTS:' e 'FINAL RANKING:', mesmo\nque o resto da sua resposta esteja em portugues. Nao traduza, nao use negrito neles:
 
 VERDICTS:
 {chr(10).join(f"{l} | <o ponto mais forte, uma linha> | <a falha mais grave, uma linha>" for l in sorted(labelled))}

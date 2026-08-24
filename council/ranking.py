@@ -23,6 +23,7 @@ class Ballot:
     ok: bool = True
     error: str = ""
     raw: str = ""
+    truncated: bool = False
 
     @property
     def ranked_members(self) -> list[str]:
@@ -40,8 +41,22 @@ def assign_blind_labels(
     return dict(zip(labels_for(len(ordered)), ordered))
 
 
-_RANK_LINE = re.compile(r"^\s*(\d+)\s*[.)-]\s*(?:response\s*)?([A-Z])\b", re.IGNORECASE | re.MULTILINE)
-_VERDICT_LINE = re.compile(r"^\s*(?:response\s*)?([A-Z])\s*\|\s*(.*?)\s*\|\s*(.*?)\s*$", re.IGNORECASE | re.MULTILINE)
+# Modelo real nao obedece formato ao pe da letra: escreve "1. **Resposta A**", traduz o
+# cabecalho, poe negrito. O parser aceita essas variantes, mas continua se recusando a
+# adivinhar ordem quando nao ha ranking algum.
+_LABEL_WORD = r"(?:respostas?|response|op[cç][ãa]o|option|alternativa)"
+_RANK_LINE = re.compile(
+    r"^\s*(\d+)\s*[.)\-]\s*[*_`\"']*\s*(?:" + _LABEL_WORD + r")?\s*[:\-]?\s*[*_`\"']*\s*([A-Za-z])(?![\w])",
+    re.IGNORECASE | re.MULTILINE,
+)
+_VERDICT_LINE = re.compile(
+    r"^\s*[*_`]*\s*(?:" + _LABEL_WORD + r")?\s*([A-Za-z])\s*[*_`]*\s*\|\s*(.*?)\s*\|\s*(.*?)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+_RANK_HEADERS = ("FINAL RANKING", "RANKING FINAL", "CLASSIFICACAO FINAL", "CLASSIFICAÇÃO FINAL",
+                 "ORDENACAO FINAL", "ORDENAÇÃO FINAL", "RANQUEAMENTO FINAL")
+_VERDICT_HEADERS = ("VERDICTS", "VEREDICTOS", "VEREDITOS", "VEREDITO", "AVALIACOES", "AVALIAÇÕES")
 
 
 def parse_ballot(text: str, valid_labels: list[str]) -> tuple[list[str], dict[str, tuple[str, str]], str]:
@@ -49,13 +64,13 @@ def parse_ballot(text: str, valid_labels: list[str]) -> tuple[list[str], dict[st
     valid = set(valid_labels)
 
     verdicts: dict[str, tuple[str, str]] = {}
-    vsec = _section(text, "VERDICTS:")
+    vsec = _section(text, _VERDICT_HEADERS)
     for m in _VERDICT_LINE.finditer(vsec or ""):
         lbl = m.group(1).upper()
         if lbl in valid:
             verdicts[lbl] = (m.group(2)[:280], m.group(3)[:280])
 
-    rsec = _section(text, "FINAL RANKING:")
+    rsec = _section(text, _RANK_HEADERS)
     order: list[str] = []
     seen: set[str] = set()
     for m in _RANK_LINE.finditer(rsec if rsec is not None else text):
@@ -74,11 +89,18 @@ def parse_ballot(text: str, valid_labels: list[str]) -> tuple[list[str], dict[st
     return order, verdicts, ""
 
 
-def _section(text: str, header: str) -> str | None:
-    idx = text.upper().rfind(header.upper())
-    if idx < 0:
+def _section(text: str, headers: tuple[str, ...]) -> str | None:
+    """Trecho apos o ultimo cabecalho reconhecido, em qualquer das variantes aceitas."""
+    up = text.upper()
+    best = -1
+    end = 0
+    for h in headers:
+        idx = up.rfind(h)
+        if idx > best:
+            best, end = idx, idx + len(h)
+    if best < 0:
         return None
-    return text[idx + len(header) :]
+    return text[end:]
 
 
 @dataclass

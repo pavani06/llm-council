@@ -100,6 +100,21 @@ def main():
     o, v, e = parse_ballot("FINAL RANKING:\n1. A", ["A", "B", "C"])
     check(o == ["A", "B", "C"] and "parcial" in e, f"cedula parcial sinalizada ({e})")
 
+    # formatos que modelo real produz — o descarte da cedula do deepseek na primeira
+    # rodada ao vivo veio daqui, nao de erro do modelo.
+    reais = [
+        ("negrito + portugues", "FINAL RANKING:\n1. **Resposta B**\n2. **Resposta A**\n3. **Resposta C**", ["B", "A", "C"]),
+        ("cabecalho traduzido", "CLASSIFICACAO FINAL:\n1. Resposta C\n2. Resposta B\n3. Resposta A", ["C", "B", "A"]),
+        ("cabecalho em negrito", "**FINAL RANKING:**\n1. C\n2. B\n3. A", ["C", "B", "A"]),
+        ("rotulo minusculo", "FINAL RANKING:\n1. b\n2. c\n3. a", ["B", "C", "A"]),
+        ("parenteses", "FINAL RANKING:\n1) A\n2) C\n3) B", ["A", "C", "B"]),
+    ]
+    for nome, txt, esperado in reais:
+        o, v, e = parse_ballot(txt, ["A", "B", "C"])
+        check(o == esperado, f"{nome}: {o} (esperado {esperado})")
+    o, v, e = parse_ballot("VEREDITOS:\nA | forte | fraco\n\nFINAL RANKING:\n1. A\n2. B", ["A", "B"])
+    check(v.get("A") == ("forte", "fraco"), f"veredictos com cabecalho traduzido ({v})")
+
     print("8) mapas de rotulo por avaliador")
     for b in rec.stage2:
         print(f"        {b['ranker']:<10} {b['label_to_member']}")

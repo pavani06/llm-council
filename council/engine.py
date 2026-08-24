@@ -122,7 +122,8 @@ class Council:
             retries=s.retries,
             params=ranker.params,
         )
-        ballot = Ballot(ranker=ranker.name, label_to_member=mapping, raw=reply.content)
+        ballot = Ballot(ranker=ranker.name, label_to_member=mapping, raw=reply.content,
+                        truncated=reply.truncated)
         if not reply.ok:
             ballot.ok = False
             ballot.error = reply.error
@@ -218,6 +219,10 @@ class Council:
         for a in answers_all:
             if not a.ok:
                 rec.warnings.append(f"estagio 1: {a.name} falhou — {a.reply.error}")
+            elif a.reply.truncated:
+                rec.warnings.append(
+                    f"estagio 1: resposta de {a.name} truncada por max_tokens — aumente o teto dele em [params]"
+                )
 
         # Cegamento real: mascara autoidentificacao antes de qualquer julgamento.
         blind_answers = dict(answers)
@@ -248,12 +253,16 @@ class Council:
                     "order_labels": b.order,
                     "order_members": b.ranked_members,
                     "verdicts": {k: list(v) for k, v in b.verdicts.items()},
+                    "raw": b.raw,
                 }
                 for b in ballots
             ]
             for b in ballots:
                 if not b.ok:
-                    rec.warnings.append(f"estagio 2: cedula de {b.ranker} descartada — {b.error}")
+                    extra = " (resposta truncada por max_tokens)" if b.truncated else ""
+                    rec.warnings.append(f"estagio 2: cedula de {b.ranker} descartada — {b.error}{extra}")
+                elif b.truncated:
+                    rec.warnings.append(f"estagio 2: cedula de {b.ranker} veio truncada por max_tokens")
             consensus = borda(ballots, list(answers))
             rec.consensus = [asdict(c) for c in consensus]
             rec.divided = divided(consensus)

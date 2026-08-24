@@ -38,6 +38,9 @@ model    = "gpt-5.6-terra"
 name     = "deepseek"   # deepseek-v4-pro: $0.66 in / $1.98 out (metade fora de pico)
 provider = "deepseek"
 model    = "deepseek-v4-pro"
+# Modelo de raciocinio: mediu-se 4597 tokens de saida so para uma cedula de 3
+# candidatos. Com o teto padrao ele truncava e a cedula era descartada.
+params   = { max_tokens = 16000 }
 
 [[council]]
 name     = "claude"     # claude-opus-5: $5 in / $25 out
@@ -68,8 +71,8 @@ exclude_self_rank   = true   # ninguem ranqueia a propria resposta
 blind_chairman      = true   # o presidente nao ve marca, so o conteudo e o consenso
 shuffle_labels      = true   # ordem A/B/C diferente por avaliador, mata vies de posicao
 temperature         = 0.3
-max_tokens          = 4096
-chairman_max_tokens = 8192
+max_tokens          = 8192   # teto, nao consumo: modelo de raciocinio precisa de folga
+chairman_max_tokens = 16000
 timeout             = 180.0
 retries             = 2
 seed                = 0      # 0 = sorteia por execucao e registra; fixe para reproduzir

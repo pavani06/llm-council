@@ -41,6 +41,11 @@ class Reply:
     usage: Usage = field(default_factory=Usage)
     latency_s: float = 0.0
     attempts: int = 1
+    finish: str = ""
+
+    @property
+    def truncated(self) -> bool:
+        return self.finish == "length"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -51,6 +56,7 @@ class Reply:
             "usage": self.usage.as_dict(),
             "latency_s": round(self.latency_s, 2),
             "attempts": self.attempts,
+            "finish": self.finish,
         }
 
 
@@ -218,6 +224,7 @@ class Endpoint:
                 attempts=attempt,
             )
         msg = choices[0].get("message") or {}
+        finish = choices[0].get("finish_reason") or ""
         content = (msg.get("content") or "").strip()
         reasoning = (msg.get("reasoning_content") or msg.get("reasoning") or "") or ""
         u = body.get("usage") or {}
@@ -226,10 +233,11 @@ class Endpoint:
             completion_tokens=int(u.get("completion_tokens") or 0),
         )
         if not content:
-            finish = choices[0].get("finish_reason", "?")
+            extra = " — o modelo gastou o teto raciocinando" if finish == "length" else ""
             return Reply(
                 ok=False,
-                error=f"conteudo vazio (finish_reason={finish})",
+                finish=finish,
+                error=f"conteudo vazio (finish_reason={finish}){extra}",
                 reasoning=reasoning,
                 usage=usage,
                 latency_s=time.monotonic() - started,
@@ -240,6 +248,7 @@ class Endpoint:
             content=content,
             reasoning=reasoning,
             usage=usage,
+            finish=finish,
             latency_s=time.monotonic() - started,
             attempts=attempt,
         )
@@ -392,11 +401,11 @@ class AnthropicEndpoint(Endpoint):
         text = "\n".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
         thinking = "\n".join(b.get("thinking", "") for b in blocks if b.get("type") == "thinking").strip()
         if not text:
-            return Reply(ok=False, usage=usage, reasoning=thinking,
+            return Reply(ok=False, usage=usage, reasoning=thinking, finish=stop or "",
                          latency_s=time.monotonic() - started, attempts=attempt,
                          error=f"sem bloco de texto na resposta (stop_reason={stop})")
         return Reply(ok=True, content=text, reasoning=thinking, usage=usage,
-                     latency_s=time.monotonic() - started, attempts=attempt)
+                     finish=stop or "", latency_s=time.monotonic() - started, attempts=attempt)
 
 
 ENDPOINT_TYPES = {"openai": Endpoint, "anthropic": AnthropicEndpoint}
