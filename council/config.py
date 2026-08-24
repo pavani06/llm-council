@@ -94,6 +94,8 @@ class Config:
             base_url=spec["base_url"],
             api_key=os.environ.get(key_env),
             headers=spec.get("headers"),
+            max_tokens_field=spec.get("max_tokens_field", "max_tokens"),
+            unsupported=tuple(spec.get("unsupported", ())),
         )
 
     def key_env_for(self, provider: str) -> str:

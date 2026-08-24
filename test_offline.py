@@ -213,6 +213,45 @@ def main():
     except ImportError:
         print("  pulado  SDK anthropic ausente neste interpretador (rode com .venv/bin/python)")
 
+    print("11) declaracao de parametros por provedor")
+    capturado = {}
+
+    class FakeResp:
+        @staticmethod
+        def read():
+            return b'{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}],"usage":{}}'
+
+    def fake_request(self, path, payload, timeout, method="POST"):
+        capturado.clear()
+        capturado.update(payload or {})
+        return FakeResp()
+
+    orig = Endpoint._request
+    Endpoint._request = fake_request
+    try:
+        oai = Endpoint("openai", "https://x/v1", "k",
+                       max_tokens_field="max_completion_tokens", unsupported=("temperature",))
+        r = oai.chat("gpt-5.6-terra", [{"role": "user", "content": "oi"}],
+                     temperature=0.3, max_tokens=50000, retries=0)
+        check(r.ok, "chamada monta e responde")
+        check("max_tokens" not in capturado, "nao manda max_tokens onde o modelo o recusa")
+        check(capturado.get("max_completion_tokens") == 50000,
+              f"usa max_completion_tokens ({capturado.get('max_completion_tokens')})")
+        check("temperature" not in capturado, "remove temperature declarada como nao suportada")
+
+        padrao = Endpoint("deepseek", "https://y/v1", "k")
+        padrao.chat("m", [{"role": "user", "content": "oi"}], temperature=0.3, max_tokens=50000, retries=0)
+        check(capturado.get("max_tokens") == 50000, "provedor sem declaracao segue com max_tokens")
+        check(capturado.get("temperature") == 0.3, "e mantem temperature")
+    finally:
+        Endpoint._request = orig
+
+    ant = AnthropicEndpoint("anthropic", "https://api.anthropic.com", "k", unsupported=("temperature",))
+    kw = ant._build("claude-opus-5", [{"role": "user", "content": "oi"}], 50000,
+                    {"temperature": 0.5})
+    check("temperature" not in kw, "adaptador anthropic tambem honra 'unsupported'")
+    check(kw.get("max_tokens") == 50000, "teto de 50k chega ao anthropic")
+
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")

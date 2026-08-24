@@ -3,8 +3,12 @@
 # Precos abaixo sao referencia de ago/2026 (USD por 1M tokens), so para calibrar custo.
 
 [providers.openai]
-base_url    = "https://api.openai.com/v1"
-api_key_env = "OPENAI_API_KEY"
+base_url         = "https://api.openai.com/v1"
+api_key_env      = "OPENAI_API_KEY"
+# Os gpt-5.6 renomearam o teto e fixaram a temperatura. Declarado aqui porque
+# descobrir por 400 custava 3 idas-e-voltas em TODA chamada (medido nos registros).
+max_tokens_field = "max_completion_tokens"
+unsupported      = ["temperature"]
 
 [providers.deepseek]
 base_url    = "https://api.deepseek.com/v1"
@@ -39,27 +43,22 @@ name     = "deepseek"   # deepseek-v4-pro: $0.66 in / $1.98 out (metade fora de 
 provider = "deepseek"
 model    = "deepseek-v4-pro"
 # Modelo de raciocinio: mediu-se 4597 tokens de saida so para uma cedula de 3
-# candidatos. Com o teto padrao ele truncava e a cedula era descartada.
-params   = { max_tokens = 16000 }
+# candidatos, e 9838 numa pergunta densa. Coberto pelo teto global.
 
 [[council]]
 name     = "claude"     # claude-opus-5: $5 in / $25 out
 provider = "anthropic"
 model    = "claude-opus-5"
 # temperature fica de fora de proposito: o Opus 5 devolve 400 se ela vier.
-# max_tokens maior porque o thinking adaptativo (ligado por padrao) consome desse teto.
-# Subido de 8192 para 16000: na mesma pergunta densa ele fechou em 7154, a 87% do
-# teto antigo — passou perto sem avisar. Nao foi truncamento, foi quase.
-params   = { max_tokens = 16000 }
+# O thinking adaptativo (ligado por padrao) consome do mesmo teto; mediu-se 7154
+# tokens de saida numa pergunta densa. Coberto pelo teto global.
 
 [[council]]
 name     = "glm"        # z.ai glm-5.3: $1.4 in / $4.4 out
 provider = "zai"
 model    = "glm-5.3"
-# Modelo de raciocinio. Numa pergunta densa gastou os 8192 do teto global inteiros
-# em raciocinio e nao sobrou texto (finish_reason=length, resposta descartada).
-# Teto e limite, nao consumo: numa pergunta simples ele fecha em ~1100 tokens.
-params   = { max_tokens = 24000 }
+# Modelo de raciocinio. Ja gastou 8192 inteiros so raciocinando, sem emitir texto;
+# com folga fecha em 11488. Coberto pelo teto global.
 
 # --- presidente ---------------------------------------------------------
 # De proposito FORA do conselho: quem sintetiza nao deve estar julgando a
@@ -77,9 +76,15 @@ exclude_self_rank   = true   # ninguem ranqueia a propria resposta
 blind_chairman      = true   # o presidente nao ve marca, so o conteudo e o consenso
 shuffle_labels      = true   # ordem A/B/C diferente por avaliador, mata vies de posicao
 temperature         = 0.3
-max_tokens          = 8192   # teto, nao consumo: modelo de raciocinio precisa de folga
-chairman_max_tokens = 16000
-timeout             = 180.0
+# Teto e limite, nao consumo: numa pergunta simples o conselho fecha em ~300-1400
+# tokens por membro. So paga quem usar.
+max_tokens          = 50000
+chairman_max_tokens = 50000
+# O timeout PRECISA acompanhar o teto: nas taxas medidas (42-66 tok/s) uma geracao
+# de 50k tokens leva 13-20 min. Com os 180s antigos, o teto novo seria decorativo —
+# a chamada morreria antes. Contrapartida: um provedor travado agora segura a rodada
+# por ate 20 min em vez de 3.
+timeout             = 1200.0
 retries             = 2
 seed                = 0      # 0 = sorteia por execucao e registra; fixe para reproduzir
 runs_dir            = "runs"

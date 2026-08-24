@@ -79,11 +79,18 @@ class Endpoint:
         base_url: str,
         api_key: str | None,
         headers: dict[str, str] | None = None,
+        max_tokens_field: str = "max_tokens",
+        unsupported: tuple[str, ...] = (),
     ):
         self.name = name
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.extra_headers = headers or {}
+        # Alguns modelos renomearam ou removeram parametros (os gpt-5.6 exigem
+        # 'max_completion_tokens' e recusam temperature != 1). Declarar aqui evita
+        # descobrir isso por 400 a cada chamada — eram 3 idas-e-voltas por request.
+        self.max_tokens_field = max_tokens_field
+        self.unsupported = tuple(unsupported)
 
     # ------------------------------------------------------------------ HTTP
 
@@ -145,8 +152,10 @@ class Endpoint:
         if temperature is not None:
             payload["temperature"] = temperature
         if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
+            payload[self.max_tokens_field] = max_tokens
         payload.update(params or {})
+        for campo in self.unsupported:
+            payload.pop(campo, None)
 
         started = time.monotonic()
         attempt = 0
@@ -191,8 +200,10 @@ class Endpoint:
         if temperature is not None:
             payload["temperature"] = temperature
         if max_tokens is not None:
-            payload["max_tokens"] = max_tokens
+            payload[self.max_tokens_field] = max_tokens
         payload.update(params or {})
+        for campo in self.unsupported:
+            payload.pop(campo, None)
         try:
             resp = self._request("/chat/completions", payload, timeout)
         except ProviderError as e:
@@ -330,6 +341,8 @@ class AnthropicEndpoint(Endpoint):
         if system:
             kwargs["system"] = system
         kwargs.update(params or {})  # temperature/thinking entram so por aqui
+        for campo in self.unsupported:
+            kwargs.pop(campo, None)
         return kwargs
 
     def chat(
