@@ -11,8 +11,12 @@ base_url    = "https://api.deepseek.com/v1"
 api_key_env = "DEEPSEEK_API_KEY"
 
 [providers.zai]
-base_url    = "https://api.z.ai/api/paas/v4"
-api_key_env = "ZAI_API_KEY"
+# GLM Coding Plan (assinatura), nao a API avulsa. A avulsa seria /api/paas/v4.
+# Atencao: cada pergunta ao conselho gasta 2 chamadas GLM (resposta + avaliacao)
+# da cota trimestral do plano.
+base_url     = "https://api.z.ai/api/coding/paas/v4"
+api_key_env  = "ZAI_API_KEY"
+known_models = ["glm-5.3", "glm-5-turbo", "glm-4.7"]  # liberados no coding plan
 
 # --- conselheiros -------------------------------------------------------
 # Diversidade de familia e o que faz o conselho valer: tres modelos do mesmo

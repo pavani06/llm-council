@@ -141,11 +141,16 @@ def cmd_models(args) -> int:
             continue
         try:
             ids = cfg.endpoint(name).list_models()
+            fonte = ""
         except Exception as e:
-            print(f"{name}: FALHA — {e}")
-            rc = 1
-            continue
-        print(f"{name} ({len(ids)}):")
+            known = cfg.known_models(name)
+            if not known:
+                print(f"{name}: FALHA — {e}")
+                rc = 1
+                continue
+            ids = known
+            fonte = "  [catalogo do council.toml; o endpoint nao expoe /models]"
+        print(f"{name} ({len(ids)}):{fonte}")
         for i in ids:
             print(f"  {i}")
     return rc

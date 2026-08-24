@@ -95,6 +95,10 @@ class Config:
         spec = self.providers.get(provider, {})
         return spec.get("api_key_env", f"{provider.upper()}_API_KEY")
 
+    def known_models(self, provider: str) -> list[str]:
+        """Catalogo declarado no TOML, usado quando o endpoint nao expoe /models."""
+        return list(self.providers.get(provider, {}).get("known_models", []))
+
     def has_key(self, provider: str) -> bool:
         return bool(os.environ.get(self.key_env_for(provider)))
 
