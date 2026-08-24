@@ -137,6 +137,14 @@ def cmd_doctor(args) -> int:
     if not cfg.has_key(ch.provider):
         print(f"BLOQUEADO: presidente sem chave ({cfg.key_env_for(ch.provider)}).")
         return 1
+    from . import provenance
+    commit, sujo = provenance.git_state()
+    print()
+    print("selo atual (o que um registro gerado agora carregaria)")
+    print(f"  codigo   {provenance.code_digest()[:16]}")
+    print(f"  config   {provenance.config_digest(cfg)[:16]}")
+    print(f"  commit   {(commit or '-')[:12]}{' +SUJO' if sujo else ''}")
+    print()
     print(f"pronto: {n} conselheiros ativos, presidente {'cego' if cfg.settings.blind_chairman else 'com identidades'}.")
     return 0
 
@@ -191,6 +199,21 @@ def cmd_show(args) -> int:
         return 0
     print(f"{target.name}  ({data['started_at']}, {data['elapsed_s']}s)")
     print(f"pergunta: {data['question'][:200]}")
+
+    selo = data.get("producer") or {}
+    if selo:
+        from . import provenance
+        commit = (selo.get("git_commit") or "-")[:12]
+        sujo = " +sujo" if selo.get("git_dirty") else ""
+        print()
+        print(f"produtor    council {selo.get('version','?')} · python {selo.get('python','?')}")
+        print(f"            commit {commit}{sujo}")
+        print(f"            codigo {selo.get('code_sha256','')[:12]}  config {selo.get('config_sha256','')[:12]}")
+        for div in provenance.compare(selo):
+            print(f"  DIVERGE   {div}")
+    else:
+        print()
+        print("  (registro anterior ao selo de produtor — origem nao verificavel)")
     print()
     for c in data.get("consensus", []):
         print(f"  {c['member']:<14} {c['score']:.2f}  posicoes {c['positions']}")

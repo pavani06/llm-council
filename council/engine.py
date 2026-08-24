@@ -14,6 +14,7 @@ from typing import Any, Callable, Iterator
 
 from .config import Config, Member
 from .prompts import chairman_prompt, ranking_prompt
+from .provenance import seal
 from .providers import Reply
 from .ranking import (
     Ballot,
@@ -50,6 +51,7 @@ class Run:
     seed: int
     started_at: str
     config_source: str
+    producer: dict[str, Any] = field(default_factory=dict)
     members: list[dict[str, Any]] = field(default_factory=list)
     stage1: list[dict[str, Any]] = field(default_factory=list)
     stage2: list[dict[str, Any]] = field(default_factory=list)
@@ -196,6 +198,15 @@ class Council:
             started_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             config_source=str(self.cfg.source),
         )
+        # Sela o produtor ANTES de rodar: o registro tem de dizer qual codigo e qual
+        # config o geraram, senao ele fica ininterpretavel apos qualquer edicao.
+        from . import __version__
+        rec.producer = seal(self.cfg, __version__)
+        if rec.producer.get("git_dirty"):
+            rec.warnings.append(
+                "arvore de trabalho suja na execucao: o commit registrado nao endereca "
+                "por inteiro o codigo que rodou (o code_sha256 endereca)"
+            )
 
         members = self.cfg.active_members()
         skipped = [m for m in self.cfg.members if m not in members]

@@ -256,6 +256,64 @@ def main():
     check("temperature" not in kw, "adaptador anthropic tambem honra 'unsupported'")
     check(kw.get("max_tokens") == 50000, "teto de 50k chega ao anthropic")
 
+    print("12) selo do produtor")
+    import hashlib, json as _json, os as _os
+    from council import provenance as pv
+
+    selo = pv.seal(cfg, "0.1.0")
+    for campo in ("version", "python", "git_commit", "git_dirty",
+                  "code_sha256", "config_sha256", "config_source", "config"):
+        check(campo in selo, f"selo tem '{campo}'")
+    check(len(selo["code_sha256"]) == 64, "code_sha256 e um sha256 completo")
+
+    # nenhum VALOR de chave pode entrar no retrato — so o nome da variavel
+    blob = _json.dumps(selo, ensure_ascii=False)
+    vazou = []
+    for nome, valor in _os.environ.items():
+        if len(valor) >= 16 and ("KEY" in nome or "TOKEN" in nome or "SECRET" in nome):
+            if valor in blob:
+                vazou.append(nome)
+    check(not vazou, f"nenhum valor de credencial no selo (vazou: {vazou})")
+    check("CLAUDE_API_KEY" in blob or "api_key_env" in blob,
+          "mas o NOME da variavel e preservado, que e o que interessa")
+
+    # o retrato reflete a config RESOLVIDA, nao o arquivo
+    import copy as _copy
+    cfg_menor = _copy.copy(cfg)
+    cfg_menor.members = cfg.members[:2]
+    check(pv.config_digest(cfg_menor) != pv.config_digest(cfg),
+          "mudar o roster (ex.: --members) muda o config_sha256")
+
+    snap = pv.config_snapshot(cfg)
+    check([m["name"] for m in snap["council"]] == [m.name for m in cfg.members],
+          "retrato lista o roster em ordem")
+    check("temperature" in snap["settings"], "retrato inclui os settings")
+
+    # code_digest reage a edicao de qualquer fonte do pacote
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        d = Path(td)
+        (d / "a.py").write_text("x = 1")
+        h1 = pv.code_digest(d)
+        (d / "a.py").write_text("x = 2")
+        h2 = pv.code_digest(d)
+        (d / "b.py").write_text("y = 1")
+        h3 = pv.code_digest(d)
+        check(h1 != h2, "editar um fonte muda o code_sha256")
+        check(h2 != h3, "acrescentar um fonte muda o code_sha256")
+
+    check(pv.compare({"code_sha256": "0" * 64}) != [], "compare() acusa codigo divergente")
+    check(pv.compare({"code_sha256": pv.code_digest(), "git_dirty": False}) == [],
+          "compare() fica calado quando bate")
+    check(any("SUJA" in d for d in pv.compare({"git_dirty": True})),
+          "compare() acusa arvore suja na execucao")
+
+    # o selo entra no registro E no sha256 dele
+    check(rec.producer.get("code_sha256"), "execucao gravou o selo no registro")
+    import dataclasses as _dc
+    r2 = _dc.replace(rec, producer={**rec.producer, "code_sha256": "1" * 64})
+    check(r2.digest() != rec.digest(), "mudar o selo muda o sha256 do registro")
+
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")
