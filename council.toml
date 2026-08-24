@@ -1,0 +1,57 @@
+# Conselho de LLMs — configuracao unica.
+# Verifique os ids reais da sua conta com:  ./council models
+# Precos abaixo sao referencia de ago/2026 (USD por 1M tokens), so para calibrar custo.
+
+[providers.openai]
+base_url    = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+
+[providers.deepseek]
+base_url    = "https://api.deepseek.com/v1"
+api_key_env = "DEEPSEEK_API_KEY"
+
+[providers.zai]
+base_url    = "https://api.z.ai/api/paas/v4"
+api_key_env = "ZAI_API_KEY"
+
+# --- conselheiros -------------------------------------------------------
+# Diversidade de familia e o que faz o conselho valer: tres modelos do mesmo
+# treinador erram junto e o ranqueamento vira teatro.
+
+[[council]]
+name     = "gpt"        # openai gpt-5.6-terra: $2 in / $12 out
+provider = "openai"
+model    = "gpt-5.6-terra"
+
+[[council]]
+name     = "deepseek"   # deepseek-v4-pro: $0.66 in / $1.98 out (metade fora de pico)
+provider = "deepseek"
+model    = "deepseek-v4-pro"
+
+[[council]]
+name     = "glm"        # z.ai glm-5.3: $1.4 in / $4.4 out
+provider = "zai"
+model    = "glm-5.3"
+
+# --- presidente ---------------------------------------------------------
+# De proposito FORA do conselho: quem sintetiza nao deve estar julgando a
+# propria resposta. Troque por outro provedor se quiser ainda mais distancia.
+
+[chairman]
+name     = "presidente"
+provider = "openai"
+model    = "gpt-5.6-sol"   # $4 in / $20 out
+
+# --- ajustes ------------------------------------------------------------
+
+[settings]
+exclude_self_rank   = true   # ninguem ranqueia a propria resposta
+blind_chairman      = true   # o presidente nao ve marca, so o conteudo e o consenso
+shuffle_labels      = true   # ordem A/B/C diferente por avaliador, mata vies de posicao
+temperature         = 0.3
+max_tokens          = 4096
+chairman_max_tokens = 8192
+timeout             = 180.0
+retries             = 2
+seed                = 0      # 0 = sorteia por execucao e registra; fixe para reproduzir
+runs_dir            = "runs"
