@@ -292,7 +292,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
           <text x="560" y="604" text-anchor="middle" font-weight="500" class="f-seal">registro selado</text>
           <text x="560" y="619" text-anchor="middle" font-size="10" class="f-seal" opacity=".85" font-family="IBM Plex Mono, monospace">runs/…-sha256.json</text>
 
-          <text x="380" y="662" text-anchor="middle" font-size="11" opacity=".7">o registro guarda prompts, respostas, cédulas, mapa de rótulos e a seed — a rodada é reconstituível</text>
+          <text x="380" y="662" text-anchor="middle" font-size="11" opacity=".7">o registro guarda prompts, respostas, cédulas, mapa de rótulos e a seed</text>
         </g>
       </svg>
     </div>
@@ -588,7 +588,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
 
   <div class="note">
     <span class="lbl">Custódia</span>
-    <p>Cada execução grava <code>runs/&lt;data&gt;-&lt;sha12&gt;.json</code> com a pergunta, todos os prompts enviados, as respostas cruas, cada cédula com seu mapa de rótulos, a seed do embaralhamento e o <code>sha256</code> do próprio registro. Fixando a seed no TOML, a rodada é reconstituível. É o que permite auditar depois <em>por que</em> o conselho decidiu assim, e não só o que ele decidiu.</p>
+    <p>Cada execução grava <code>runs/&lt;data&gt;-&lt;sha12&gt;.json</code> com a pergunta, todos os prompts enviados, as respostas cruas, cada cédula com seu mapa de rótulos, a seed do embaralhamento e o <code>sha256</code> do próprio registro. A seed fixa o embaralhamento dos rótulos, não a saída dos modelos — o registro é <em>inspecionável</em>, não reproduzível: rodar de novo com a mesma seed dá outras respostas. O que ele permite é auditar depois por que o conselho decidiu assim, e não só o que decidiu.</p>
   </div>
 </section>
 
