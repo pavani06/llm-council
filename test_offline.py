@@ -13,6 +13,9 @@ from council.engine import Council, save_run
 from council.providers import AnthropicEndpoint, Endpoint, Reply, Usage
 from council.ranking import parse_ballot
 
+CHAT_REAL = Endpoint.chat          # guardado antes de qualquer monkeypatch
+CHAT_REAL_ANT = AnthropicEndpoint.chat
+
 FALHAS = []
 
 
@@ -226,8 +229,9 @@ def main():
         capturado.update(payload or {})
         return FakeResp()
 
-    orig = Endpoint._request
+    orig_req, orig_chat = Endpoint._request, Endpoint.chat
     Endpoint._request = fake_request
+    Endpoint.chat = CHAT_REAL   # a secao 1 trocou por mock e nao restaurou
     try:
         oai = Endpoint("openai", "https://x/v1", "k",
                        max_tokens_field="max_completion_tokens", unsupported=("temperature",))
@@ -244,7 +248,7 @@ def main():
         check(capturado.get("max_tokens") == 50000, "provedor sem declaracao segue com max_tokens")
         check(capturado.get("temperature") == 0.3, "e mantem temperature")
     finally:
-        Endpoint._request = orig
+        Endpoint._request, Endpoint.chat = orig_req, orig_chat
 
     ant = AnthropicEndpoint("anthropic", "https://api.anthropic.com", "k", unsupported=("temperature",))
     kw = ant._build("claude-opus-5", [{"role": "user", "content": "oi"}], 50000,
