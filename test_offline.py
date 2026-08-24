@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from council import config as cfgmod
 from council.engine import Council, save_run
-from council.providers import Endpoint, Reply, Usage
+from council.providers import AnthropicEndpoint, Endpoint, Reply, Usage
 from council.ranking import parse_ballot
 
 FALHAS = []
@@ -26,6 +26,7 @@ RESPOSTAS = {
     "gpt-5.6-terra": "Resposta do GPT: use indice parcial.",
     "deepseek-v4-pro": "Resposta do DeepSeek: use indice parcial e VACUUM.",
     "glm-5.3": "Resposta do GLM: reescreva a query.",
+    "claude-opus-5": "Resposta do Claude: meça antes com EXPLAIN ANALYZE.",
 }
 
 VISTOS = []
@@ -47,27 +48,29 @@ def fake_chat(self, model, messages, **kw):
 
 def main():
     Endpoint.chat = fake_chat
+    AnthropicEndpoint.chat = fake_chat  # senao 'claude' sairia para a rede
     cfg = cfgmod.load(Path(__file__).parent / "council.toml")
     cfg.has_key = lambda p: True
 
     print("1) execucao completa")
     rec = Council(cfg).run("Como acelerar esta query?")
     check(rec.synthesis.get("content") == "SINTESE FINAL", "estagio 3 sintetizou")
-    check(len(rec.stage1) == 3, f"3 respostas no estagio 1 (foi {len(rec.stage1)})")
-    check(len(rec.stage2) == 3, f"3 cedulas no estagio 2 (foi {len(rec.stage2)})")
+    n = len(cfg.members)
+    check(len(rec.stage1) == n, f"{n} respostas no estagio 1 (foi {len(rec.stage1)})")
+    check(len(rec.stage2) == n, f"{n} cedulas no estagio 2 (foi {len(rec.stage2)})")
 
     print("2) auto-exclusao")
     for b in rec.stage2:
         check(b["ranker"] not in b["order_members"],
               f"{b['ranker']} fora da propria cedula ({b['order_members']})")
-        check(len(b["label_to_member"]) == 2,
-              f"{b['ranker']} avaliou 2 candidatos (foi {len(b['label_to_member'])})")
+        check(len(b["label_to_member"]) == n - 1,
+              f"{b['ranker']} avaliou {n - 1} candidatos (foi {len(b['label_to_member'])})")
 
     print("3) cegamento no estagio 2")
     for model, prompt in VISTOS:
         if "FINAL RANKING" not in prompt:
             continue
-        vazou = [t for t in ("GPT", "DeepSeek", "GLM", "gpt-5.6", "deepseek-v4", "glm-5.3") if t in prompt]
+        vazou = [t for t in ("GPT", "DeepSeek", "GLM", "Claude", "gpt-5.6", "deepseek-v4", "glm-5.3", "claude-opus") if t in prompt]
         check(not vazou, f"prompt de ranking sem marca (vazou: {vazou})")
         check("[modelo]" in prompt, "autoidentificacao foi mascarada no prompt de ranking")
 
@@ -78,7 +81,7 @@ def main():
 
     print("5) presidente cego")
     chair = [p for m, p in VISTOS if "preside um conselho" in p][0]
-    vazou = [t for t in ("gpt-5.6", "deepseek-v4", "glm-5.3") if t in chair]
+    vazou = [t for t in ("gpt-5.6", "deepseek-v4", "glm-5.3", "claude-opus") if t in chair]
     check(not vazou, f"prompt do presidente sem marca (vazou: {vazou})")
     check("consenso" in chair, "presidente recebeu tabela de consenso agregada")
     check("FINAL RANKING" not in chair, "presidente NAO recebeu texto cru de ranking")
@@ -122,12 +125,56 @@ def main():
         return fake_chat(self, model, messages, **kw)
 
     Endpoint.chat = chat_com_falha
+    AnthropicEndpoint.chat = chat_com_falha
     rec2 = Council(cfg).run("outra pergunta")
     check(rec2.synthesis.get("ok"), "sintese ocorre com 1 conselheiro fora")
     check(any("glm" in w and "429" in w for w in rec2.warnings),
           f"falha reportada: {rec2.warnings}")
-    check(any("estagio 2 pulado" in w for w in rec2.warnings),
-          "com 2 respostas o estagio 2 e pulado explicitamente")
+    restantes = len([x for x in rec2.stage1 if x.get("ok")])
+    if restantes >= 3:
+        check(len(rec2.stage2) == restantes,
+              f"com {restantes} respostas o estagio 2 segue rodando ({len(rec2.stage2)} cedulas)")
+        check(all(len(b["label_to_member"]) == restantes - 1 for b in rec2.stage2),
+              "cedulas reduzidas ao conjunto que respondeu")
+    else:
+        check(any("estagio 2 pulado" in w for w in rec2.warnings),
+              f"com {restantes} respostas o estagio 2 e pulado explicitamente")
+
+    # e o limiar em si, testado direto: 2 respostas validas -> estagio 2 pulado
+    cfg_min = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg_min.has_key = lambda p: True
+    cfg_min.members = cfg_min.members[:2]
+    rec3 = Council(cfg_min).run("pergunta curta")
+    check(any("estagio 2 pulado" in w for w in rec3.warnings),
+          f"limiar: com 2 conselheiros o estagio 2 e pulado ({rec3.warnings})")
+
+    print("10) adaptador Anthropic (Messages API)")
+    ep = AnthropicEndpoint("anthropic", "https://api.anthropic.com", "chave-falsa")
+    h = ep._headers()
+    check("x-api-key" in h and "Authorization" not in h, "usa x-api-key, nao Bearer")
+    check(h.get("anthropic-version") == "2023-06-01", "manda anthropic-version")
+    pay = ep._payload("claude-opus-5",
+                      [{"role": "system", "content": "SYS"}, {"role": "user", "content": "oi"}],
+                      4096, 0.3, None)
+    check("temperature" not in pay, "NAO manda temperature (Opus 5 devolve 400 se vier)")
+    check(pay.get("max_tokens") == 4096, "max_tokens presente (obrigatorio na Messages API)")
+    check(pay.get("system") == "SYS" and len(pay["messages"]) == 1,
+          "system sai do array de mensagens para o campo proprio")
+    pay2 = ep._payload("claude-opus-5", [{"role": "user", "content": "oi"}], 4096, 0.3,
+                       {"temperature": 1.0})
+    check(pay2.get("temperature") == 1.0, "temperature entra se o operador pedir em [params]")
+
+    corpo = {"content": [{"type": "thinking", "thinking": "hmm"},
+                         {"type": "text", "text": "resposta"}],
+             "usage": {"input_tokens": 7, "output_tokens": 3}, "stop_reason": "end_turn"}
+    r = AnthropicEndpoint._parse_anthropic(corpo, 0.0, 1)
+    check(r.ok and r.content == "resposta", "extrai so o bloco de texto")
+    check(r.reasoning == "hmm", "guarda o thinking separado, fora da resposta")
+    check(r.usage.prompt_tokens == 7 and r.usage.completion_tokens == 3, "mapeia input/output_tokens")
+    rec_ = AnthropicEndpoint._parse_anthropic(
+        {"stop_reason": "refusal", "stop_details": {"category": "cyber", "explanation": "nao"},
+         "content": [], "usage": {}}, 0.0, 1)
+    check(not rec_.ok and "recusa" in rec_.error, f"recusa (HTTP 200) vira falha explicita: {rec_.error}")
 
     print()
     if FALHAS:

@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .providers import Endpoint
+from .providers import ENDPOINT_TYPES, Endpoint
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_CANDIDATES = [
@@ -38,7 +38,9 @@ def load_env_files() -> list[Path]:
             if key.startswith("export "):
                 key = key[7:].strip()
             val = val.strip().strip('"').strip("'")
-            if key and key not in os.environ:
+            # Sobrescreve variavel existente que esteja VAZIA: um export em branco no
+            # .bashrc nao deve mascarar a chave real do .env (era o que acontecia aqui).
+            if key and val and not os.environ.get(key, "").strip():
                 os.environ[key] = val
     return loaded
 
@@ -84,7 +86,10 @@ class Config:
         if spec is None:
             raise KeyError(f"provedor '{provider}' nao esta em [providers] de {self.source}")
         key_env = spec.get("api_key_env", f"{provider.upper()}_API_KEY")
-        return Endpoint(
+        api = spec.get("api", "openai")
+        if api not in ENDPOINT_TYPES:
+            raise ValueError(f"provedor '{provider}': api='{api}' desconhecida (use {sorted(ENDPOINT_TYPES)})")
+        return ENDPOINT_TYPES[api](
             name=provider,
             base_url=spec["base_url"],
             api_key=os.environ.get(key_env),

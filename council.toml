@@ -10,6 +10,13 @@ api_key_env = "OPENAI_API_KEY"
 base_url    = "https://api.deepseek.com/v1"
 api_key_env = "DEEPSEEK_API_KEY"
 
+[providers.anthropic]
+# Messages API — NAO e OpenAI-compativel; o adaptador cuida da traducao.
+base_url     = "https://api.anthropic.com"
+api_key_env  = "CLAUDE_API_KEY"
+api          = "anthropic"
+known_models = ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5"]
+
 [providers.zai]
 # GLM Coding Plan (assinatura), nao a API avulsa. A avulsa seria /api/paas/v4.
 # Atencao: cada pergunta ao conselho gasta 2 chamadas GLM (resposta + avaliacao)
@@ -31,6 +38,14 @@ model    = "gpt-5.6-terra"
 name     = "deepseek"   # deepseek-v4-pro: $0.66 in / $1.98 out (metade fora de pico)
 provider = "deepseek"
 model    = "deepseek-v4-pro"
+
+[[council]]
+name     = "claude"     # claude-opus-5: $5 in / $25 out
+provider = "anthropic"
+model    = "claude-opus-5"
+# temperature fica de fora de proposito: o Opus 5 devolve 400 se ela vier.
+# max_tokens maior porque o thinking adaptativo (ligado por padrao) consome desse teto.
+params   = { max_tokens = 8192 }
 
 [[council]]
 name     = "glm"        # z.ai glm-5.3: $1.4 in / $4.4 out

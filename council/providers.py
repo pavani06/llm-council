@@ -259,3 +259,144 @@ def _drop_offending_param(payload: dict, body: str) -> str | None:
             payload.pop(p)
             return p
     return None
+
+
+class AnthropicEndpoint(Endpoint):
+    """Anthropic Messages API (/v1/messages) — nao e OpenAI-compativel.
+
+    Diferencas que importam e que o adaptador resolve:
+    - auth por header 'x-api-key' + 'anthropic-version', nao Bearer;
+    - 'max_tokens' e obrigatorio;
+    - 'temperature' foi REMOVIDA nos modelos atuais (Opus 5, Sonnet 5, 4.7/4.8):
+      manda-la devolve 400, entao so vai se o operador pedir em [params];
+    - a resposta e uma lista de blocos; os de 'thinking' vem junto e nao sao texto;
+    - 'stop_reason: refusal' e HTTP 200 — precisa virar falha explicita, nao resposta vazia.
+    """
+
+    ANTHROPIC_VERSION = "2023-06-01"
+
+    def _headers(self) -> dict[str, str]:
+        h = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+            "User-Agent": USER_AGENT,
+            "anthropic-version": self.ANTHROPIC_VERSION,
+        }
+        if self.api_key:
+            h["x-api-key"] = self.api_key
+        h.update(self.extra_headers)
+        return h
+
+    @staticmethod
+    def _split(messages: list[dict[str, str]]) -> tuple[str | None, list[dict[str, str]]]:
+        system = None
+        turns = []
+        for m in messages:
+            if m["role"] == "system":
+                system = m["content"] if system is None else f"{system}\n\n{m['content']}"
+            else:
+                turns.append({"role": m["role"], "content": m["content"]})
+        return system, turns
+
+    def _payload(self, model, messages, max_tokens, temperature, params) -> dict[str, Any]:
+        system, turns = self._split(messages)
+        payload: dict[str, Any] = {
+            "model": model,
+            "max_tokens": max_tokens or 4096,  # obrigatorio na Messages API
+            "messages": turns,
+        }
+        if system:
+            payload["system"] = system
+        # temperature so entra por pedido explicito em [params] — ver docstring.
+        payload.update(params or {})
+        return payload
+
+    def chat(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float | None = 0.3,
+        max_tokens: int | None = 4096,
+        timeout: float = 180.0,
+        retries: int = 2,
+        params: dict[str, Any] | None = None,
+    ) -> Reply:
+        payload = self._payload(model, messages, max_tokens, temperature, params)
+        started = time.monotonic()
+        attempt = 0
+        last = ""
+        while attempt <= retries:
+            attempt += 1
+            try:
+                resp = self._request("/v1/messages", payload, timeout)
+                return self._parse_anthropic(json.loads(resp.read().decode()), started, attempt)
+            except ProviderError as e:
+                last = str(e)
+                if e.status is not None and e.status not in RETRY_STATUS:
+                    break
+                if attempt <= retries:
+                    time.sleep(min(2 ** attempt, 8))
+        return Reply(ok=False, error=last or "falha desconhecida",
+                     latency_s=time.monotonic() - started, attempts=attempt)
+
+    def stream(
+        self,
+        model: str,
+        messages: list[dict[str, str]],
+        *,
+        temperature: float | None = 0.3,
+        max_tokens: int | None = 4096,
+        timeout: float = 180.0,
+        params: dict[str, Any] | None = None,
+    ) -> Iterator[str]:
+        payload = self._payload(model, messages, max_tokens, temperature, params)
+        payload["stream"] = True
+        try:
+            resp = self._request("/v1/messages", payload, timeout)
+        except ProviderError as e:
+            yield f"[erro: {e}]"
+            return
+        for raw in resp:
+            line = raw.decode("utf-8", "replace").strip()
+            if not line.startswith("data:"):
+                continue
+            try:
+                ev = json.loads(line[5:].strip())
+            except json.JSONDecodeError:
+                continue
+            if ev.get("type") == "content_block_delta":
+                delta = ev.get("delta") or {}
+                if delta.get("type") == "text_delta" and delta.get("text"):
+                    yield delta["text"]
+
+    def list_models(self, timeout: float = 30.0) -> list[str]:
+        resp = self._request("/v1/models", None, timeout, method="GET")
+        data = json.loads(resp.read().decode())
+        return sorted(m["id"] for m in data.get("data", []) if m.get("id"))
+
+    @staticmethod
+    def _parse_anthropic(body: dict, started: float, attempt: int) -> Reply:
+        u = body.get("usage") or {}
+        usage = Usage(
+            prompt_tokens=int(u.get("input_tokens") or 0),
+            completion_tokens=int(u.get("output_tokens") or 0),
+        )
+        stop = body.get("stop_reason")
+        if stop == "refusal":
+            det = body.get("stop_details") or {}
+            return Reply(ok=False, usage=usage, latency_s=time.monotonic() - started, attempts=attempt,
+                         error=f"recusa do modelo (categoria={det.get('category')}): {det.get('explanation')}")
+
+        blocks = body.get("content") or []
+        text = "\n".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+        thinking = "\n".join(b.get("thinking", "") for b in blocks if b.get("type") == "thinking").strip()
+        if not text:
+            return Reply(ok=False, usage=usage, reasoning=thinking,
+                         latency_s=time.monotonic() - started, attempts=attempt,
+                         error=f"sem bloco de texto na resposta (stop_reason={stop})")
+        return Reply(ok=True, content=text, reasoning=thinking, usage=usage,
+                     latency_s=time.monotonic() - started, attempts=attempt)
+
+
+ENDPOINT_TYPES = {"openai": Endpoint, "anthropic": AnthropicEndpoint}

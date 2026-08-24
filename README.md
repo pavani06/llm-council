@@ -3,13 +3,16 @@
 Vários LLMs de provedores diferentes respondem a mesma pergunta, avaliam-se **às cegas**, e um
 presidente sintetiza. CLI + servidor MCP. **Zero dependências** — só a stdlib do Python 3.11+.
 
+Conselho atual: `gpt-5.6-terra`, `deepseek-v4-pro`, `claude-opus-5`, `glm-5.3` (coding plan);
+presidente `gpt-5.6-sol`, de fora do conselho.
+
 Derivado do `llm-council` do Karpathy, com as correções que a versão original não tem: cegamento
 que de fato cega, agregação por Borda em vez de ranking descartado, e falha nunca silenciosa.
 
 ## Uso
 
 ```bash
-cp .env.example .env      # preencha OPENAI_API_KEY / DEEPSEEK_API_KEY / ZAI_API_KEY
+cp .env.example .env      # OPENAI_API_KEY / DEEPSEEK_API_KEY / ZAI_API_KEY / CLAUDE_API_KEY
 ./bin/council doctor      # confere chaves, roster e coerência
 ./bin/council models      # ids reais da sua conta em cada provedor
 ./bin/council ask "sua pergunta"
@@ -60,9 +63,15 @@ rótulos, seed e `sha256` do registro. Fixe `seed` no TOML para reproduzir uma r
 
 ## Configuração
 
-Tudo em `council.toml`: provedores (qualquer endpoint OpenAI-compatível), roster, presidente e
-ajustes. `params` por conselheiro passa campos extras direto no payload. Chaves só via `.env` ou
-ambiente — nenhum valor é impresso em lugar nenhum.
+Tudo em `council.toml`: provedores, roster, presidente e ajustes. Cada provedor declara `api`:
+`openai` (default — vale para OpenAI, DeepSeek e z.ai) ou `anthropic`, que fala a Messages API
+(`/v1/messages`, header `x-api-key`, `max_tokens` obrigatório, **sem `temperature`** — o Opus 5
+devolve 400 se ela vier, e blocos `thinking` são separados do texto). `params` por conselheiro passa campos extras direto no payload. Chaves só via `.env` ou ambiente —
+nenhum valor é impresso em lugar nenhum.
+
+**Pegadinha do ambiente:** um `export OPENAI_API_KEY=` vazio no `.bashrc` mascarava a chave real do
+`.env`. O loader agora sobrescreve variável existente que esteja em branco — variável vazia não é
+configuração, é ruído.
 
 ## Testes
 
