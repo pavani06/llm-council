@@ -558,6 +558,31 @@ def main():
     d, e = _pd("sem bloco algum", ["op1"])
     check(d == {} and "ausente" in e, f"bloco DECISION ausente ({e})")
 
+    # regressoes de probes adversariais (review): cabecalho e LINHA INTEIRA,
+    # campo vazio invalida, id gigante nao derruba, acento e grafia aceitos
+    qs, e = _pq("NOTQUESTIONS:\n1 | falsa? | falsa", 3)
+    check(qs == [] and "ausente" in e, f"'NOTQUESTIONS:' nao abre bloco ({e})")
+    qs, e = _pq("QUESTIONS:\n1 | |", 3)
+    check(qs == [] and "nenhuma linha" in e, f"questao com campos vazios rejeitada ({e})")
+    qs, e = _pq("QUESTIONS:\n" + "5" * 5000 + " | gigante? | x", 3)
+    check(qs == [] and e, f"id de 5000 digitos nao derruba o parser ({e[:40]})")
+    qs, e = _pq("QUESTÕES:\n1 | acento? | sim", 3)
+    check(e == "" and len(qs) == 1, f"cabecalho acentuado aceito ({e})")
+    p, e = _pp("COUNTERPROPOSAL:\nTITULO: falso\nCORPO:\nfalso")
+    check(p == {} and "ausente" in e, f"'COUNTERPROPOSAL:' nao abre bloco ({e})")
+    p, e = _pp("PROPOSAL:\nTITULO: \"\"\nCORPO: c")
+    check(p == {} and "vazio" in e, f"titulo vazio e malformed ({e})")
+    p, e = _pp("PROPOSAL:\nTITULO: t\nCORPO:")
+    check(p == {} and "vazio" in e, f"corpo vazio e malformed ({e})")
+    p, e = _pp("PROPOSAL:\nTITULO: t\nCORPO:\nproposta de verdade\n\nDECISION:\nDECIDIDO | op1 | a | b | c")
+    check(e == "" and "DECISION" not in p["corpo"], f"corpo nao engole bloco DECISION posterior ({p['corpo'][-30:]})")
+    d, e = _pd("INDECISION:\nDECIDIDO | op1 | alta | - | f", ["op1"])
+    check(d == {} and "ausente" in e, f"'INDECISION:' nao abre bloco ({e})")
+    d, e = _pd("DECISION:\nDECIDIDO | op1 | | |", ["op1"])
+    check(d == {} and "nenhuma linha" in e, f"decisao com campos vazios rejeitada ({e})")
+    d, e = _pd("DECISÃO:\nDECIDIDO | op1 | alta | nenhuma | ok", ["op1"])
+    check(e == "" and d["status"] == "DECIDIDO", f"cabecalho acentuado de decisao aceito ({e})")
+
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")
