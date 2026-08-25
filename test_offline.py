@@ -685,7 +685,6 @@ stage1_format = "questions"
     check(cfgmod.load(Path(__file__).parent / "council.toml").profiles == {},
           "council.toml atual (sem perfis) carrega com profiles vazio")
 
-
     # regressoes de probes adversariais (review): tipo errado em roles/criteria
     # e containers malformados nunca viram crash nem aceitacao silenciosa
     tipo_errado = [
@@ -749,10 +748,20 @@ stage1_format = "questions"
     dec_div = _dec("q?", {"A": "x", "B": "y"}, cons2, divided=True)
     check("DIVIDIDO" in dec_div and "ENCALHADO" in dec_div,
           "divided exige ENCALHADO com sintese do impasse")
+    check("ENCALHADO" not in _dec("q?", {"A": "x"}, cons2),
+          "divided tem default False")
+    try:
+        _dec("q?", {}, cons2)
+        check(False, "candidates vazio deveria reclamar")
+    except ValueError as ex:
+        check("ao menos um candidato" in str(ex), f"candidates vazio nomeado ({ex})")
 
     q5 = "Qual o proximo passo?"
     check(_s1(q5) == q5, "sem bundle e prose devolve a pergunta inalterada")
-    check(_s1(q5, None, "questions") == _s1(q5, None, "questions"), "chamada estavel")
+    check(_s1(q5, "", "prose") == q5, "bundle vazio conta como ausente em prose")
+    sem_ctx = _s1(q5, None, "questions")
+    check("QUESTIONS:" in sem_ctx and "CONTEXTO" not in sem_ctx,
+          "questions sem bundle injeta diretriz sem secao de contexto")
     with_bundle = _s1(q5, "plano: fase 1", "prose")
     check("plano: fase 1" in with_bundle and "QUESTIONS:" not in with_bundle
           and "PROPOSAL:" not in with_bundle, "bundle entra e prose nao ganha diretriz")

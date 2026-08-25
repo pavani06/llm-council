@@ -112,13 +112,16 @@ def _ordered(answers: dict[str, str], consensus) -> list[str]:
     return list(answers)
 
 
-def decision_prompt(question: str, candidates: dict[str, str], consensus, *, divided: bool) -> str:
+def decision_prompt(question: str, candidates: dict[str, str], consensus, *,
+                    divided: bool = False) -> str:
     """Presidente-decisore: eleger o proximo passo (ou declarar impasse).
 
     A linha final segue a gramatica exata de council/structured.py: cinco campos
     separados por pipe, nenhum vazia ('nenhuma' e valor valido), cabecalho
     'DECISION:' so na linha do bloco.
     """
+    if not candidates:
+        raise ValueError("decision_prompt exige ao menos um candidato (recebeu vazio)")
     corpo = "\n\n".join(f"### {lbl}\n{txt}" for lbl, txt in sorted(candidates.items()))
     rotulos = ", ".join(sorted(candidates))
     tabela = _tabela_consensus({c: c for c in candidates}, consensus)
@@ -198,7 +201,7 @@ def stage1_user_prompt(question: str, bundle: str | None = None,
         raise ValueError(
             f"stage1_format desconhecido: '{stage1_format}' (use prose, questions ou proposal)"
         )
-    if bundle is None and stage1_format == "prose":
+    if not bundle and stage1_format == "prose":
         return question
     partes = []
     if bundle:
