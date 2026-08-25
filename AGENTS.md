@@ -41,7 +41,7 @@ Todo PR de código carrega `docs/handoffs/issue-N.md` (≤ 35 linhas):
 
 ```
 # Handoff — issue #N (T-x)
-Merged: <sha12> · PR #<n> · <data>
+PR #<n> · branch <nome> (código em <sha12 do commit de código>) · <data>
 
 ## O que mudou no repo
 ## Decisões tomadas em voo (fora do plano)
@@ -49,6 +49,9 @@ Merged: <sha12> · PR #<n> · <data>
 ## O que a próxima issue precisa saber
 ## Pendências deixadas
 ```
+
+O cabeçalho só afirma o que é verdadeiro antes do merge: o handoff viaja dentro do PR,
+então nunca declare "merged" nele — o estado de merge vive no PR, que é a fonte.
 
 Handoff ausente ou incompleto = finding BLOCKING no review. A próxima issue lê este
 arquivo ANTES do plano.
