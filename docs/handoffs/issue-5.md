@@ -6,7 +6,7 @@ PR #20 · branch issue/5-prompts-parametrizados (código em 695dfa57bf3f) · 202
 - `test_offline.py`: seção 17 (18 checks).
 
 ## Decisões tomadas em voo (fora do plano)
-- `decision_prompt(question, candidates, consensus, *, divided)`: recebe candidatos JÁ rotulados (cegos ou não — quem rotula é o engine/#8); `chairman_prompt(mode="decider", divided=...)` delega para ela (assinatura compatível via answers).
+- `decision_prompt(question, candidates, consensus, *, divided=False)`: recebe candidatos JÁ rotulados (dict não vazio — vazio levanta ValueError nomeado) (cegos ou não — quem rotula é o engine/#8); `chairman_prompt(mode="decider", divided=...)` delega para ela (assinatura compatível via answers).
 - `stage1_user_prompt(question, bundle=None, stage1_format="prose")` — SEM role_hint: papel viaja como mensagem system no engine (#6), não no user prompt. Divida registrada aqui; #6 não deve reinventar.
 - Diretrizes dos blocos pedem a gramática EXATA de structured.py (5 campos com pipes, 'nenhuma' como valor, palavra-cabeçalho proibida em outras linhas) — os prompts e o parser nasceram casados.
 
