@@ -3,7 +3,7 @@ PR #17 · branch issue/3-structured-parser (código em 76bfb9e33800) · 2026-08-
 
 ## O que mudou no repo
 - `council/structured.py` (novo, folha): `parse_questions(texto, max_n)`, `parse_proposal(texto)`, `parse_decision(texto, ids_validos)` — todos `(resultado, erro)`.
-- `test_offline.py`: seção 18 (39 checks: bem-formados, variantes, malformados, 21 regressões de duas rodadas de probes adversariais do review).
+- `test_offline.py`: seção 18 (43 checks: bem-formados, variantes, malformados, 25 regressões de tres rodadas de probes adversariais do review).
 
 ## Decisões tomadas em voo (fora do plano)
 - Cabeçalho vale só como LINHA INTEIRA, com negrito/crase e dois-pontos finais em qualquer quantidade/ordem (`**QUESTIONS**:`, `__DECISÃO__:`, `QUESTIONS::::` → abrem bloco; `NOTQUESTIONS:` → não). Seção termina no próximo cabeçalho estruturado de qualquer tipo.

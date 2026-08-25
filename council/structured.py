@@ -64,7 +64,12 @@ def _section(texto: str, headers: tuple[str, ...]) -> str | None:
 
 
 def _limpar(campo: str) -> str:
-    return campo.strip().strip("*_`\"'").strip()
+    s = campo.strip()
+    while True:
+        t = s.strip("*_`\"'").strip()
+        if t == s:
+            return t
+        s = t
 
 
 def _vazio_semantico(campo: str) -> bool:
