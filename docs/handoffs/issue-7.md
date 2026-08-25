@@ -1,5 +1,5 @@
 # Handoff — issue #7 (T6)
-PR #22 · branch issue/7-candidatos (código em fdddcfa19aed) · 2026-08-25
+PR #22 · branch issue/7-candidatos (código em 3e25ca70e838) · 2026-08-25
 
 ## O que mudou no repo
 - `council/engine.py`: `Candidate(id, text, author)`, `_distill()` (scrubado→candidatos), `stage2`/`_rank_one` sobre candidatos com `exclude_self_rank` por author, **avaliadores = respondentes do estágio 1** (`answerers`), cédula com <2 elegíveis nasce inválida com erro nomeado ("minimo 2"), criteria do perfil no ranking, `borda` por id, limiar e aviso contando candidatos.
