@@ -616,6 +616,75 @@ def main():
     d, e = _pd("PROPOSTA:\nTITULO: x\nCORPO:\ny\n\nDECISION:\nENCALHADO | op1 | baixa | glm | impasse", ["op1"])
     check(e == "" and d["status"] == "ENCALHADO", f"DECISION depois de PROPOSTA e achado ({e})")
 
+    print("16) perfis de deliberacao na config")
+    import tempfile as _tmpdir
+
+    PERFIL_OK = """
+[providers.openai]
+base_url = "https://x/v1"
+
+[[council]]
+name = "gpt"
+provider = "openai"
+model = "gpt-5.6-terra"
+
+[[council]]
+name = "glm"
+provider = "openai"
+model = "glm-5.3"
+
+[chairman]
+provider = "openai"
+model = "gpt-5.6-sol"
+
+[profiles.questionador]
+roles = { gpt = "cetico", glm = "mapeador de dependencias" }
+criteria = ["load-bearingness", "decidibilidade"]
+chairman_mode = "decider"
+stage1_format = "questions"
+"""
+
+    def _cfg_de(texto: str):
+        with _tmpdir.TemporaryDirectory() as td:
+            p = Path(td) / "council.toml"
+            p.write_text(texto, encoding="utf-8")
+            return cfgmod.load(p)
+
+    cfg_p = _cfg_de(PERFIL_OK)
+    prof = cfg_p.profiles["questionador"]
+    check(prof.roles == {"gpt": "cetico", "glm": "mapeador de dependencias"},
+          f"roles por conselheiro ({prof.roles})")
+    check(prof.criteria == ["load-bearingness", "decidibilidade"],
+          f"criteria declarados ({prof.criteria})")
+    check(prof.chairman_mode == "decider" and prof.stage1_format == "questions",
+          "modo e formato do perfil")
+
+    cfg_vazio = _cfg_de(PERFIL_OK + "\n[profiles.min]\n")
+    m = cfg_vazio.profiles["min"]
+    check(m.criteria is None and m.roles == {} and m.chairman_mode == "synthesizer"
+          and m.stage1_format == "prose", "perfil de tabela vazia tem os defaults")
+
+    invalidos = [
+        (PERFIL_OK.replace('roles = { gpt = "cetico"', 'roles = { grok = "cetico"'),
+         "conselheiro inexistente 'grok'"),
+        (PERFIL_OK + '\n[profiles.oito]\ncriteria = ["a","b","c","d","e","f","g","h"]\n',
+         "de 1 a 7 itens (tem 8)"),
+        (PERFIL_OK + '\n[profiles.vazio]\ncriteria = []\n', "de 1 a 7 itens (tem 0)"),
+        (PERFIL_OK + '\n[profiles.dictador]\nchairman_mode = "dictador"\n', "synthesizer ou decider"),
+        (PERFIL_OK + '\n[profiles.poema]\nstage1_format = "poema"\n', "prose ou questions ou proposal"),
+        (PERFIL_OK + '\n[profiles.ruido]\nvision = "x"\n', "desconhecida"),
+        (PERFIL_OK + '\n[profiles.dup]\n[profiles.dup]\n', "TOML invalido"),
+    ]
+    for texto, msg in invalidos:
+        try:
+            _cfg_de(texto)
+            check(False, f"perfil invalido deveria reclamar de: {msg}")
+        except ValueError as ex:
+            check(msg in str(ex), f"erro nomeado: {msg} ({str(ex)[:60]})")
+
+    check(cfgmod.load(Path(__file__).parent / "council.toml").profiles == {},
+          "council.toml atual (sem perfis) carrega com profiles vazio")
+
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")
