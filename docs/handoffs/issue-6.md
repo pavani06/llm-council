@@ -1,5 +1,5 @@
 # Handoff — issue #6 (T5)
-PR #<n> · branch issue/6-engine-spec (código em f327cf82f475) · 2026-08-25
+PR #21 · branch issue/6-engine-spec (código em f327cf82f475) · 2026-08-25
 
 ## O que mudou no repo
 - `council/engine.py`: dataclass `Deliberation(question, profile=None, bundle=None, run_refs=[])`; `run(str | Deliberation)`; `_ask_one`/`stage1` recebem a spec e montam mensagens com papel.
