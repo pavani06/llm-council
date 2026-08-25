@@ -1,5 +1,5 @@
 # Handoff — issue #2 (T1)
-PR #16 · branch issue/2-golden-snapshots (código em c3696fb) · 2026-08-25
+PR #16 · branch issue/2-golden-snapshots (código em c3696fbe7263) · 2026-08-25
 
 ## O que mudou no repo
 - `test_offline.py`: seção 15 — golden byte a byte (bytes, não str) dos 3 renders (ranking, chairman cego, chairman aberto), entrada FIXA declarada no teste.
