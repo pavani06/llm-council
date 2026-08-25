@@ -299,6 +299,14 @@ class Council:
                 "por inteiro o codigo que rodou (o code_sha256 endereca)"
             )
 
+        # deliberacao: campos da spec entram no registro ANTES de qualquer
+        # retorno antecipado — falha sem membros nao pode apagar a origem
+        if spec.profile is not None:
+            rec.profile_name = spec.profile.name
+        rec.run_refs = list(spec.run_refs)
+        if spec.bundle is not None:
+            rec.bundle_sha256 = hashlib.sha256(spec.bundle.encode("utf-8")).hexdigest()
+
         members = self.cfg.active_members()
         skipped = [m for m in self.cfg.members if m not in members]
         for m in skipped:
@@ -310,12 +318,6 @@ class Council:
             rec.elapsed_s = time.monotonic() - t0
             return rec
         rec.members = [{"name": m.name, "provider": m.provider, "model": m.model} for m in members]
-        # deliberacao: campos da spec entram no registro (aditivo)
-        if spec.profile is not None:
-            rec.profile_name = spec.profile.name
-        rec.run_refs = list(spec.run_refs)
-        if spec.bundle:
-            rec.bundle_sha256 = hashlib.sha256(spec.bundle.encode("utf-8")).hexdigest()
 
         # estagio 1
         answers_all = self.stage1(spec, members)
@@ -400,6 +402,15 @@ class Council:
                                 f"{'decidindo' if mode == 'decider' else 'sintetizando'}")
         alias_decisao: dict[str, str] = {}
         if mode == "decider":
+            if not candidates:
+                # sem candidatos destilados nao ha o que decidir: nao se chama o
+                # presidente, a falha entra nomeada no registro.
+                rec.warnings.append(
+                    "estagio 3: decisao impossivel — nenhum candidato destilado"
+                )
+                rec.usage = _total_usage(rec)
+                rec.elapsed_s = round(time.monotonic() - t0, 2)
+                return rec
             if s.blind_chairman:
                 # candidatos e tabela exibidos por rotulo cego; a decisao volta
                 # traduzida para o id real antes de entrar no registro.
@@ -458,6 +469,9 @@ def save_run(rec: Run, runs_dir: Path) -> Path:
     digest = rec.digest()
     stamp = rec.started_at.replace(":", "").replace("-", "")
     path = runs_dir / f"{stamp}-{digest[:12]}.json"
+    # registro e imutavel: o mesmo sha ja gravado nao se reescreve (mtime prova)
+    if path.is_file():
+        return path
     payload = asdict(rec) | {"sha256": digest}
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return path

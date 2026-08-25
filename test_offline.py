@@ -1051,7 +1051,8 @@ stage1_format = "questions"
           f"decisao parseada com escolha REAL ({r21b.decision and r21b.decision['escolha']})")
     check(r21b.decision and not str(r21b.decision["escolha"]).startswith("Candidato"),
           "escolha des-aliased (rotulo cego nao vaza para o registro)")
-    check(len(r21b.candidates) == 4, f"4 candidatos (proposal: 1 por resposta) ({len(r21b.candidates)})")
+    check(len(r21b.candidates) == 4 and all("author" in c for c in r21b.candidates),
+          f"4 candidatos com autor ({len(r21b.candidates)})")
 
     # (c) DECISION malformada: decisao None + aviso nomeado
     Endpoint.chat = chat_delib("DECISION:\nacho que sim")
@@ -1109,13 +1110,55 @@ stage1_format = "questions"
           "mudar perfis muda o config_sha256")
     cfg21.profiles = {}
 
-    # (g) mesma execucao, mesmo arquivo: enderecamento por sha nao reescreve
+    # (g) mesma execucao, mesmo arquivo: nem cria segundo arquivo NEM reescreve
     with _tmpdir.TemporaryDirectory() as td21:
         dir21 = Path(td21) / "runs"
         p1 = save_run(r21a, dir21)
+        mtime1 = p1.stat().st_mtime_ns
         p2 = save_run(r21a, dir21)
-        check(p1 == p2 and len(list(dir21.glob("*.json"))) == 1,
-              "segundo save do mesmo registro nao cria arquivo novo")
+        check(p1 == p2 and len(list(dir21.glob("*.json"))) == 1
+              and p2.stat().st_mtime_ns == mtime1,
+              "segundo save do mesmo registro nao reescreve (mtime identico)")
+
+    # (h) falha sem membros NAO apaga a origem: campos da spec preenchidos
+    cfg_sem = _copy21.copy(cfg21)
+    cfg_sem.has_key = lambda p: False
+    r21h = Council(cfg_sem).run(_Del3("q?", profile=prof_dec, bundle="ctx",
+                                      run_refs=["ref1"]))
+    check(r21h.profile_name == "cont" and r21h.run_refs == ["ref1"]
+          and r21h.bundle_sha256 == _hl21.sha256(b"ctx").hexdigest(),
+          "retorno antecipado (sem conselheiros) mantem profile/refs/bundle no registro")
+
+    # (i) bundle vazio: sha do conteudo vazio (ausente = None, vazio = hash)
+    Endpoint.chat = chat_delib("DECISION:\nDECIDIDO | Candidato A | alta | nenhuma | x")
+    AnthropicEndpoint.chat = Endpoint.chat
+    try:
+        r21i = Council(cfg21).run(_Del3("q?", profile=prof_dec, bundle=""))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
+    check(r21i.bundle_sha256 == _hl21.sha256(b"").hexdigest(),
+          f"bundle vazio = sha256 do vazio ({r21i.bundle_sha256[:12]}…)")
+    r21i2 = Council(cfg21).run(_Del3("q?", profile=prof_dec))
+    check(r21i2.bundle_sha256 is None, "bundle ausente = None")
+
+    # (j) decider sem candidatos destilados: warning nomeado, sem crash
+    def chat_sem_bloco(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            return fake_chat(self, model, messages, **kw)
+        return Reply(ok=True, content="prosa sem bloco nenhum", usage=Usage(5, 5))
+
+    Endpoint.chat = chat_sem_bloco
+    AnthropicEndpoint.chat = chat_sem_bloco
+    try:
+        r21j = Council(cfg21).run(_Del3("q?", profile=_Prof3(name="g0", chairman_mode="decider",
+                                                             stage1_format="questions")))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
+    check(r21j.decision is None
+          and any("decisao impossivel" in w for w in r21j.warnings)
+          and not r21j.synthesis,
+          f"zero candidatos + decider: falha nomeada, sem chamada ao presidente ({[w for w in r21j.warnings if 'impossivel' in w]})")
 
     print()
     print()

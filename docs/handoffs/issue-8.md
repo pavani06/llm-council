@@ -2,14 +2,14 @@
 PR #23 · branch issue/8-registro-decider (código em 6b7f81628014) · 2026-08-25
 
 ## O que mudou no repo
-- `council/engine.py`: campos aditivos no `Run` (`profile_name`, `bundle_sha256`, `run_refs`, `candidates`, `decision`); estágio 3 roteado por `chairman_mode` (synthesizer=default; decider via `decision_prompt` com `divided`); decider com `blind_chairman` exibe candidatos como `Candidato A/B/…` (ordem do consensus) e **des-aliasa a escolha** antes de gravar; parse falho → warning "estagio 3: decisao ilegivel — <erro>".
+- `council/engine.py`: campos aditivos no `Run` (`profile_name`, `bundle_sha256`, `run_refs`, `candidates`, `decision`) preenchidos ANTES de qualquer retorno antecipado; estágio 3 roteado por `chairman_mode` (synthesizer=default; decider via `decision_prompt` com `divided`); decider com `blind_chairman` exibe candidatos como `Candidato A/B/…` (ordem do consensus) e **des-aliasa a escolha** antes de gravar; parse falho → warning "estagio 3: decisao ilegivel — <erro>"; decider sem candidatos → warning "decisao impossivel", zero chamadas ao presidente; `save_run` nunca reescreve arquivo existente.
 - `council/provenance.py`: `config_snapshot` ganha `"profiles"` (roles/criteria/chairman_mode/stage1_format; criteria None → null) — perfis mudam o `config_sha256`.
-- `test_offline.py`: seção 21 (16 checks, casos (a)-(g) da diretiva).
+- `test_offline.py`: seção 21 (18 checks, casos (a)-(j)).
 
 ## Decisões tomadas em voo (fora do plano)
 - **Decider cego por rótulo**: a diretiva dizia `{c.id: c.text}` direto, mas em `proposal` id = nome de membro — com `blind_chairman=True` (default) isso vazaria identidade para o presidente. Candidatos e tabela exibidos como `Candidato <letra>` (ordem do consensus, estável); `parse_decision` valida os rótulos; `escolha` é traduzida de volta ao id real antes do registro.
-- `bundle=""` → `bundle_sha256=None` (vazio = ausente, coerente com #5).
-- Uma única chamada de presidente em ambos os modos; síntese cru segue em `rec.synthesis` mesmo no decider.
+- `bundle_sha256`: `bundle is not None` → sha do CONTEÚDO (vazio tem sha próprio; ausente = None) — semântica do plano, não a de #5.
+- Decider sem candidatos não chama o presidente: não há o que decidir; a falha é nomeada no registro.
 
 ## Pegadinhas descobertas
 - `decision_prompt` começa com "Voce preside um conselho que precisa DECIDIR" — contém o substring "preside um conselho" que os mocks da suite usam para detectar o estágio 3 synthesizer. Distinguir por "precisa DECIDIR" (ver antes na ordem de checagem).
