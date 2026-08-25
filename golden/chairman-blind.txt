@@ -15,13 +15,13 @@ Rode VACUUM e reescreva a query com LATERAL.
 Meça com EXPLAIN ANALYZE antes de decidir.
 
 AVALIACAO CRUZADA (cada resposta foi julgada as cegas pelos outros, sem auto-avaliacao; consenso 1.00 = sempre em primeiro):
-- gpt: consenso 0.78 (posicoes [1, 2, 2], dispersao 0.47)
+- Resposta A: consenso 0.78 (posicoes [1, 2, 2], dispersao 0.47)
     a favor: vai direto ao ponto
     contra:  ignora o custo de escrita
-- claude: consenso 0.72 (posicoes [2, 1, 1], dispersao 0.47)
+- Resposta B: consenso 0.72 (posicoes [2, 1, 1], dispersao 0.47)
     a favor: mede antes de opinar
     contra:  vago no comando concreto
-- glm: consenso 0.31 (posicoes [3, 3, 3], dispersao 0.0)
+- Resposta C: consenso 0.31 (posicoes [3, 3, 3], dispersao 0.0)
     a favor: unica ideia diferente
     contra:  nao responde ao pedido
 

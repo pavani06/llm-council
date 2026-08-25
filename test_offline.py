@@ -455,10 +455,19 @@ def main():
 
     # Entrada FIXA: qualquer edicao em prompts.py muda o render e o golden acusa.
     FIX_Q = "Como acelerar esta query no Postgres?"
-    FIX_ANS = {
+    # ranking_prompt recebe ROTULOS CEGOS (A/B/C), como _rank_one monta.
+    RANK_ANS = {
         "A": "Use indice parcial no campo status.",
         "B": "Rode VACUUM e reescreva a query com LATERAL.",
         "C": "Meça com EXPLAIN ANALYZE antes de decidir.",
+    }
+    # chairman_prompt recebe respostas por NOME DE MEMBRO e consensus com os
+    # mesmos nomes (engine.py:291-296) — fixture fora dessa forma congela uma
+    # chamada que a producao jamais faz.
+    CHAIR_ANS = {
+        "gpt": "Use indice parcial no campo status.",
+        "claude": "Rode VACUUM e reescreva a query com LATERAL.",
+        "glm": "Meça com EXPLAIN ANALYZE antes de decidir.",
     }
     FIX_CONS = [
         _Cons(member="gpt", score=0.78, positions=[1, 2, 2], ballots=3, spread=0.47,
@@ -469,9 +478,9 @@ def main():
               strengths=["unica ideia diferente"], weaknesses=["nao responde ao pedido"]),
     ]
     renders = {
-        "ranking.txt": _rank(FIX_Q, FIX_ANS),
-        "chairman-blind.txt": _chair(FIX_Q, FIX_ANS, FIX_CONS, blind=True),
-        "chairman-open.txt": _chair(FIX_Q, FIX_ANS, FIX_CONS, blind=False),
+        "ranking.txt": _rank(FIX_Q, RANK_ANS),
+        "chairman-blind.txt": _chair(FIX_Q, CHAIR_ANS, FIX_CONS, blind=True),
+        "chairman-open.txt": _chair(FIX_Q, CHAIR_ANS, FIX_CONS, blind=False),
     }
 
     def _divergencia(a: str, b: str) -> str:
@@ -484,13 +493,15 @@ def main():
     for nome, texto in sorted(renders.items()):
         alvo = gdir / nome
         if alvo.is_file():
-            base = alvo.read_text(encoding="utf-8")
-            check(base == texto,
-                  f"{nome}: prompt atual identico ao golden (byte a byte)"
-                  + ("" if base == texto else f" — {_divergencia(base, texto)}"))
+            base = alvo.read_bytes()
+            atual = texto.encode("utf-8")
+            check(base == atual,
+                  f"{nome}: render atual identico ao golden (byte a byte)"
+                  + ("" if base == atual
+                     else f" — {_divergencia(base.decode('utf-8', 'replace'), texto)}"))
         else:
             gdir.mkdir(exist_ok=True)
-            alvo.write_text(texto, encoding="utf-8")
+            alvo.write_bytes(texto.encode("utf-8"))
             check(True, f"{nome}: baseline gravado (bootstrap)")
 
     print()

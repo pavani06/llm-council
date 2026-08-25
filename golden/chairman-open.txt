@@ -5,13 +5,13 @@ Como acelerar esta query no Postgres?
 
 RESPOSTAS DO CONSELHO:
 
-### A
+### gpt
 Use indice parcial no campo status.
 
-### B
+### claude
 Rode VACUUM e reescreva a query com LATERAL.
 
-### C
+### glm
 Meça com EXPLAIN ANALYZE antes de decidir.
 
 AVALIACAO CRUZADA (cada resposta foi julgada as cegas pelos outros, sem auto-avaliacao; consenso 1.00 = sempre em primeiro):
