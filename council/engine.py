@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from .config import Config, Member
-from .prompts import chairman_prompt, ranking_prompt
+from .prompts import chairman_prompt, ranking_prompt, stage1_user_prompt
 from .provenance import seal
 from .providers import Reply
 from .ranking import (
@@ -31,6 +31,17 @@ Progress = Callable[[str, str], None]  # (estagio, mensagem)
 
 def _noop(stage: str, msg: str) -> None:  # pragma: no cover
     pass
+
+
+@dataclass
+class Deliberation:
+    """Entrada de uma execucao. Sem perfil e sem bundle e a pergunta pura de
+    sempre; com perfil, ganha papeis por conselheiro e bundle de evidencia."""
+
+    question: str
+    profile: Any = None            # config.Profile | None
+    bundle: str | None = None
+    run_refs: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -74,12 +85,27 @@ class Council:
 
     # ------------------------------------------------------------- estagio 1
 
-    def _ask_one(self, m: Member, question: str) -> MemberAnswer:
+    def _ask_one(self, m: Member, spec: Deliberation) -> MemberAnswer:
         s = self.cfg.settings
         ep = self.cfg.endpoint(m.provider)
+        if spec.profile is None:
+            # caminho sem perfil: payload identico ao historico, uma mensagem user.
+            messages = [{"role": "user", "content": spec.question}]
+        else:
+            user = stage1_user_prompt(
+                spec.question, spec.bundle, spec.profile.stage1_format
+            )
+            papel = spec.profile.roles.get(m.name)
+            if papel:
+                messages = [
+                    {"role": "system", "content": papel},
+                    {"role": "user", "content": user},
+                ]
+            else:
+                messages = [{"role": "user", "content": user}]
         reply = ep.chat(
             m.model,
-            [{"role": "user", "content": question}],
+            messages,
             temperature=s.temperature,
             max_tokens=s.max_tokens,
             timeout=s.timeout,
@@ -93,10 +119,10 @@ class Council:
         )
         return MemberAnswer(m.name, m.provider, m.model, reply)
 
-    def stage1(self, question: str, members: list[Member]) -> list[MemberAnswer]:
+    def stage1(self, spec: Deliberation, members: list[Member]) -> list[MemberAnswer]:
         self.progress("stage1", f"consultando {len(members)} conselheiros em paralelo")
         with ThreadPoolExecutor(max_workers=max(1, len(members))) as pool:
-            return list(pool.map(lambda m: self._ask_one(m, question), members))
+            return list(pool.map(lambda m: self._ask_one(m, spec), members))
 
     # ------------------------------------------------------------- estagio 2
 
@@ -188,12 +214,14 @@ class Council:
 
     # ------------------------------------------------------------- run
 
-    def run(self, question: str, *, skip_ranking: bool = False) -> Run:
+    def run(self, question: str | Deliberation, *, skip_ranking: bool = False) -> Run:
+        spec = question if isinstance(question, Deliberation) else Deliberation(question)
+        question = spec.question  # corpo existente segue lendo 'question'
         s = self.cfg.settings
         seed = s.seed or random.SystemRandom().randrange(1, 2**31)
         t0 = time.monotonic()
         rec = Run(
-            question=question,
+            question=spec.question,
             seed=seed,
             started_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             config_source=str(self.cfg.source),
@@ -221,7 +249,7 @@ class Council:
         rec.members = [{"name": m.name, "provider": m.provider, "model": m.model} for m in members]
 
         # estagio 1
-        answers_all = self.stage1(question, members)
+        answers_all = self.stage1(spec, members)
         rec.stage1 = [
             {"name": a.name, "provider": a.provider, "model": a.model, **a.reply.as_dict()}
             for a in answers_all
