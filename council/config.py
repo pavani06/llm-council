@@ -57,6 +57,27 @@ class Member:
         return f"{self.name} ({self.provider}/{self.model})"
 
 
+# Modos/formatos validos; duplicar essas listas em outro lugar e deriva silenciosa.
+CHAIRMAN_MODES = ("synthesizer", "decider")
+STAGE1_FORMATS = ("prose", "questions", "proposal")
+
+
+@dataclass
+class Profile:
+    """Perfil de deliberacao: papeis por conselheiro, criterios de julgamento,
+    modo do presidente e formato do estagio 1.
+
+    criteria=None significa "nao declarado": o default (os 4 criterios atuais
+    dos prompts) e resolvido na fronteira dos prompts — fonte unica, sem copia.
+    """
+
+    name: str
+    roles: dict[str, str] = field(default_factory=dict)
+    criteria: list[str] | None = None
+    chairman_mode: str = "synthesizer"
+    stage1_format: str = "prose"
+
+
 @dataclass
 class Settings:
     exclude_self_rank: bool = True
@@ -81,6 +102,7 @@ class Config:
     chairman: Member
     settings: Settings
     source: Path
+    profiles: dict[str, Profile] = field(default_factory=dict)
 
     def endpoint(self, provider: str) -> Endpoint:
         spec = self.providers.get(provider)
@@ -136,10 +158,70 @@ def _member(raw: dict, what: str) -> Member:
     )
 
 
+_PROFILE_KEYS = ("roles", "criteria", "chairman_mode", "stage1_format")
+
+
+def _profile(name: str, raw: dict, member_names: set[str]) -> Profile:
+    onde = f"[profiles.{name}]"
+    desconhecidas = set(raw) - set(_PROFILE_KEYS)
+    if desconhecidas:
+        raise ValueError(f"{onde}: chave(s) desconhecida(s): {sorted(desconhecidas)}")
+
+    roles_raw = raw.get("roles")
+    if roles_raw is None:
+        roles = {}
+    elif isinstance(roles_raw, dict):
+        for quem, texto in roles_raw.items():
+            if not isinstance(texto, str) or not texto.strip():
+                raise ValueError(f"{onde}: papel de '{quem}' deve ser texto nao vazio")
+        roles = dict(roles_raw)
+    else:
+        raise ValueError(
+            f"{onde}: roles deve ser uma tabela membro -> texto, "
+            f"nao {type(roles_raw).__name__}"
+        )
+    for quem in roles:
+        if quem not in member_names:
+            raise ValueError(
+                f"{onde}: papel refere conselheiro inexistente '{quem}' "
+                f"(disponiveis: {sorted(member_names)})"
+            )
+
+    criteria = raw.get("criteria")
+    if criteria is not None:
+        if isinstance(criteria, str) or not isinstance(criteria, list):
+            raise ValueError(f"{onde}: criteria deve ser uma lista de textos")
+        for item in criteria:
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError(f"{onde}: criteria so aceita textos nao vazios")
+        if not (1 <= len(criteria) <= 7):
+            raise ValueError(f"{onde}: criteria deve ter de 1 a 7 itens (tem {len(criteria)})")
+
+    mode = raw.get("chairman_mode", "synthesizer")
+    if mode not in CHAIRMAN_MODES:
+        raise ValueError(f"{onde}: chairman_mode '{mode}' invalido (use {' ou '.join(CHAIRMAN_MODES)})")
+
+    fmt = raw.get("stage1_format", "prose")
+    if fmt not in STAGE1_FORMATS:
+        raise ValueError(f"{onde}: stage1_format '{fmt}' invalido (use {' ou '.join(STAGE1_FORMATS)})")
+
+    return Profile(
+        name=name,
+        roles=roles,
+        criteria=list(criteria) if criteria is not None else None,
+        chairman_mode=mode,
+        stage1_format=fmt,
+    )
+
+
 def load(path: Path | None = None) -> Config:
     load_env_files()
     path = path or find_config()
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError as e:
+        # traceback cru de parser nao e falha nomeada; perfil duplicado cai aqui.
+        raise ValueError(f"{path}: TOML invalido — {e}") from None
 
     providers = data.get("providers") or {}
     if not providers:
@@ -167,10 +249,31 @@ def load(path: Path | None = None) -> Config:
         raise ValueError(f"{path}: settings desconhecidos: {sorted(unknown)}")
     settings = Settings(**s)
 
+    if "profiles" in data:
+        raw_profiles = data["profiles"]
+        if not isinstance(raw_profiles, dict):
+            # 'or {}' aqui engoliria profiles = "" / [] / false / 0 sem reclamar.
+            raise ValueError(
+                f"{path}: [profiles] deve ser uma tabela de perfis, "
+                f"nao {type(raw_profiles).__name__}"
+            )
+    else:
+        raw_profiles = {}
+    member_names = {m.name for m in members}
+    profiles: dict[str, Profile] = {}
+    for nome, raw in raw_profiles.items():
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"{path}: [profiles.{nome}] deve ser uma tabela, "
+                f"nao {type(raw).__name__}"
+            )
+        profiles[nome] = _profile(nome, raw, member_names)
+
     return Config(
         providers=providers,
         members=members,
         chairman=chairman,
         settings=settings,
         source=path,
+        profiles=profiles,
     )
