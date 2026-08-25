@@ -774,6 +774,81 @@ stage1_format = "questions"
     except ValueError as ex:
         check("prose, questions ou proposal" in str(ex), f"formato invalido nomeado ({ex})")
 
+    print("19) engine: spec de deliberacao")
+    from council.config import Profile as _Prof
+    from council.engine import Deliberation as _Del
+
+    MSGS_CAPTURADAS = []
+
+    def chat_capturado(self, model, messages, **kw):
+        MSGS_CAPTURADAS.append((model, [dict(m) for m in messages]))
+        return fake_chat(self, model, messages, **kw)
+
+    orig_e, orig_a = Endpoint.chat, AnthropicEndpoint.chat
+    Endpoint.chat = chat_capturado
+    AnthropicEndpoint.chat = chat_capturado
+    try:
+        cfg19 = cfgmod.load(Path(__file__).parent / "council.toml")
+        cfg19.has_key = lambda p: True
+
+        MSGS_CAPTURADAS.clear()
+        Council(cfg19).run("pergunta sem perfil?")
+        estagio1 = [(m, msgs) for m, msgs in MSGS_CAPTURADAS
+                    if "FINAL RANKING" not in msgs[0]["content"]
+                    and "preside" not in msgs[0]["content"]]
+        check(len(estagio1) == len(cfg19.members),
+              f"capturou as chamadas do estagio 1 ({len(estagio1)})")
+        check(all(len(msgs) == 1 and msgs[0]["role"] == "user"
+                  and msgs[0]["content"] == "pergunta sem perfil?" for _, msgs in estagio1),
+              "sem perfil: uma mensagem user com a pergunta exata")
+
+        prof = _Prof(name="teste", roles={"gpt": "voz cetica", "glm": "mapeador"},
+                     stage1_format="questions")
+        MSGS_CAPTURADAS.clear()
+        Council(cfg19).run(_Del("pergunta com perfil?", profile=prof, bundle="ctx: plano"))
+        por_modelo = {m: msgs for m, msgs in MSGS_CAPTURADAS
+                      if "FINAL RANKING" not in msgs[0]["content"]
+                      and "preside" not in msgs[0]["content"]}
+        msgs_gpt = por_modelo.get("gpt-5.6-terra", [])
+        check(len(msgs_gpt) == 2 and msgs_gpt[0]["role"] == "system"
+              and msgs_gpt[0]["content"] == "voz cetica",
+              f"conselheiro com papel recebe system + user ({len(msgs_gpt)} msgs)")
+        check("ctx: plano" in msgs_gpt[1]["content"] and "QUESTIONS:" in msgs_gpt[1]["content"],
+              "user do papel carrega bundle e diretriz questions")
+        msgs_ds = por_modelo.get("deepseek-v4-pro", [])
+        check(len(msgs_ds) == 1 and msgs_ds[0]["role"] == "user"
+              and "QUESTIONS:" in msgs_ds[0]["content"],
+              "conselheiro sem papel recebe so a user (com diretriz)")
+
+        prof_prose = _Prof(name="p2", roles={}, stage1_format="prose")
+        MSGS_CAPTURADAS.clear()
+        Council(cfg19).run(_Del("q?", profile=prof_prose, bundle="ctx2"))
+        prose_msgs = [msgs for m, msgs in MSGS_CAPTURADAS
+                      if "FINAL RANKING" not in msgs[0]["content"]
+                      and "preside" not in msgs[0]["content"]]
+        check(all(len(msgs) == 1 and "QUESTIONS:" not in msgs[0]["content"]
+                  and "PROPOSAL:" not in msgs[0]["content"]
+                  and "ctx2" in msgs[0]["content"] for msgs in prose_msgs),
+              "prose com bundle: todos 1 msg user, sem diretriz de bloco")
+
+        prof_prop = _Prof(name="p3", roles={}, stage1_format="proposal")
+        MSGS_CAPTURADAS.clear()
+        Council(cfg19).run(_Del("q?", profile=prof_prop))
+        prop_msgs = [msgs for m, msgs in MSGS_CAPTURADAS
+                     if "FINAL RANKING" not in msgs[0]["content"]
+                     and "preside" not in msgs[0]["content"]]
+        check(all("PROPOSAL:" in msgs[-1]["content"] for msgs in prop_msgs),
+              "proposal injeta a diretriz mesmo sem bundle")
+
+        MSGS_CAPTURADAS.clear()
+        r_str = Council(cfg19).run("mesma pergunta")
+        MSGS_CAPTURADAS.clear()
+        r_spec = Council(cfg19).run(_Del("mesma pergunta"))
+        check([a["content"] for a in r_str.stage1] == [a["content"] for a in r_spec.stage1],
+              "run(str) e run(Deliberation) produzem as mesmas respostas")
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e, orig_a
+
     print()
     print()
     if FALHAS:
