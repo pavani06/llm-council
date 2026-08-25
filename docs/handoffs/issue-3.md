@@ -1,5 +1,5 @@
 # Handoff — issue #3 (T4)
-PR #17 · branch issue/3-structured-parser (código em 76bfb9e33800) · 2026-08-25
+PR #17 · branch issue/3-structured-parser (código em 2ce6c609dfb4) · 2026-08-25
 
 ## O que mudou no repo
 - `council/structured.py` (novo, folha): `parse_questions(texto, max_n)`, `parse_proposal(texto)`, `parse_decision(texto, ids_validos)` — todos `(resultado, erro)`.
