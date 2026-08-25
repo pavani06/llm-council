@@ -30,9 +30,19 @@ _TODOS_HEADERS = _QUESTION_HEADERS + _PROPOSAL_HEADERS + _DECISION_HEADERS
 _STATUS_VALIDOS = ("DECIDIDO", "ENCALHADO")
 
 
+def _normalizar_cabecalho(linha: str) -> str:
+    """Tira negrito/sublinhado/crase e dois-pontos finais, em qualquer ordem
+    ('**QUESTIONS**:' e 'QUESTIONS::::' viram 'QUESTIONS')."""
+    s = linha.strip()
+    while True:
+        t = s.strip("*_`").strip().rstrip(":").strip()
+        if t == s:
+            return t
+        s = t
+
+
 def _eh_cabecalho(linha: str, headers: tuple[str, ...]) -> bool:
-    s = linha.strip().strip("*_`").strip().rstrip(":").strip().upper()
-    return s in headers
+    return _normalizar_cabecalho(linha).upper() in headers
 
 
 def _section(texto: str, headers: tuple[str, ...]) -> str | None:
@@ -55,6 +65,12 @@ def _section(texto: str, headers: tuple[str, ...]) -> str | None:
 
 def _limpar(campo: str) -> str:
     return campo.strip().strip("*_`\"'").strip()
+
+
+def _vazio_semantico(campo: str) -> bool:
+    """Vazio depois de tirar espaco, aspas e negrito — '\"\"' e '**' nao
+    sao conteudo; '-' e 'nenhuma' sao."""
+    return not _limpar(campo)
 
 
 # N | pergunta | recomendacao  (numero com marcadores markdown tolerados;
@@ -81,8 +97,11 @@ def parse_questions(texto: str, max_n: int) -> tuple[list[dict[str, Any]], str]:
         n = int(m.group(1))
         if not (1 <= n <= max_n) or n in vistos:
             continue
+        if _vazio_semantico(m.group(2)) or _vazio_semantico(m.group(3)):
+            continue
         vistos.add(n)
-        questoes.append({"id": str(n), "pergunta": m.group(2), "recomendacao": m.group(3)})
+        questoes.append({"id": str(n), "pergunta": m.group(2).strip(),
+                         "recomendacao": m.group(3).strip()})
     if not questoes:
         return [], "nenhuma linha de questao reconhecida no bloco QUESTIONS"
     return questoes, ""
@@ -98,14 +117,14 @@ def parse_proposal(texto: str) -> tuple[dict[str, Any], str]:
     sec = _section(texto, _PROPOSAL_HEADERS)
     if sec is None:
         return {}, "bloco PROPOSAL ausente"
-    m = re.search(r"^\s*[*_`]*\s*T[ÍI]TULO\s*[:\-]?\s*[*_`]*\s*(.*)$", sec,
+    m = re.search(r"^[ \t]*[*_`]*[ \t]*T[ÍI]TULO[ \t]*[:\-]?[ \t]*[*_`]*[ \t]*(.*)$", sec,
                   re.IGNORECASE | re.MULTILINE)
     if not m:
         return {}, "campo TITULO ausente no bloco PROPOSAL"
     titulo = _limpar(m.group(1))
     if not titulo:
         return {}, "campo TITULO vazio no bloco PROPOSAL"
-    c = re.search(r"^\s*[*_`]*\s*CORPO\s*[:\-]?\s*[*_`]*\s*(.*)$",
+    c = re.search(r"^[ \t]*[*_`]*[ \t]*CORPO[ \t]*[:\-]?[ \t]*[*_`]*[ \t]*(.*)$",
                   sec[m.end():], re.IGNORECASE | re.MULTILINE | re.DOTALL)
     if not c:
         return {}, "campo CORPO ausente no bloco PROPOSAL"
@@ -135,7 +154,9 @@ def parse_decision(texto: str, ids_validos: list[str]) -> tuple[dict[str, Any], 
         confianca = _limpar(partes[2])
         dissidencias = _limpar(partes[3])
         fundamentos = "|".join(partes[4:]).strip()
-        if not all((status, escolha, confianca, dissidencias, fundamentos)):
+        if (_vazio_semantico(status) or _vazio_semantico(escolha)
+                or _vazio_semantico(confianca) or _vazio_semantico(dissidencias)
+                or _vazio_semantico(fundamentos)):
             continue
         status = status.upper().rstrip(".!")
         if status not in _STATUS_VALIDOS:

@@ -583,6 +583,33 @@ def main():
     d, e = _pd("DECISÃO:\nDECIDIDO | op1 | alta | nenhuma | ok", ["op1"])
     check(e == "" and d["status"] == "DECIDIDO", f"cabecalho acentuado de decisao aceito ({e})")
 
+    # regressoes da segunda rodada de review: negrito com colon interno,
+    # campos so-espaco/aspas-vazias, TITULO de espacos, bloco citado
+    qs, e = _pq("**QUESTIONS**:\n1 | bold com colon? | sim", 3)
+    check(e == "" and len(qs) == 1, f"'**QUESTIONS**:' abre bloco ({e})")
+    qs, e = _pq("QUESTIONS:\n1 | a? |   ", 3)
+    check(qs == [] and "nenhuma linha" in e, f"recomendacao so-espacos rejeitada ({e})")
+    qs, e = _pq("QUESTIONS:\n1 |   | resposta", 3)
+    check(qs == [] and "nenhuma linha" in e, f"pergunta so-espacos rejeitada ({e})")
+    p, e = _pp("PROPOSAL:\nTITULO:   \nCORPO: c")
+    check(p == {} and "TITULO vazio" in e, f"titulo de so-espacos nao vira CORPO ({e})")
+    d, e = _pd("__DECISÃO__:\nDECIDIDO | op1 | alta | nenhuma | ok", ["op1"])
+    check(e == "" and d["status"] == "DECIDIDO", f"'__DECISÃO__:' abre bloco ({e})")
+    d, e = _pd("DECISION:\nDECIDIDO | op1 | alta | nenhuma | \"\"", ["op1"])
+    check(d == {} and "nenhuma linha" in e, f"fundamentos '\"\"' e vazio semantico ({e})")
+    d, e = _pd("DECISION:\nDECIDIDO | op1 | alta | nenhuma | **", ["op1"])
+    check(d == {} and "nenhuma linha" in e, f"fundamentos '**' e vazio semantico ({e})")
+    p, e = _pp("PROPOSAL:\nTITULO: t\nCORPO:\nseguir com o plano\n\n**DECISION**:\nDECIDIDO | op1 | a | b | c")
+    check(e == "" and "DECISION" not in p["corpo"], f"'**DECISION**:' posterior termina o corpo ({p.get('corpo', e)[-25:]})")
+    p, e = _pp("PROPOSAL:\nTITULO: t\nCORPO:\nveja QUESTIONS abaixo\n\nQUESTIONS:\n1 | falsa? | falsa")
+    check(e == "" and p["corpo"] == "veja QUESTIONS abaixo",
+          f"QUESTIONS citado como prosa nao termina o corpo ({p['corpo']!r})")
+    qs, e = _pq("PROPOSAL:\nTITULO: t\nCORPO:\nveja QUESTIONS abaixo\n\nQUESTIONS:\n1 | falsa? | falsa", 3)
+    check(len(qs) == 1 and qs[0]["pergunta"] == "falsa?",
+          f"o bloco QUESTIONS real e que e parseado, nao a prosa ({qs})")
+    d, e = _pd("PROPOSTA:\nTITULO: x\nCORPO:\ny\n\nDECISION:\nENCALHADO | op1 | baixa | glm | impasse", ["op1"])
+    check(e == "" and d["status"] == "ENCALHADO", f"DECISION depois de PROPOSTA e achado ({e})")
+
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")
