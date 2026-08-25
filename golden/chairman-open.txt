@@ -1,0 +1,34 @@
+Voce preside um conselho. Varios sistemas responderam a mesma pergunta e se avaliaram mutuamente as cegas. Sua tarefa nao e escolher um vencedor nem resumir: e produzir a melhor resposta possivel usando o que o conselho reuniu.
+
+PERGUNTA ORIGINAL:
+Como acelerar esta query no Postgres?
+
+RESPOSTAS DO CONSELHO:
+
+### A
+Use indice parcial no campo status.
+
+### B
+Rode VACUUM e reescreva a query com LATERAL.
+
+### C
+Meça com EXPLAIN ANALYZE antes de decidir.
+
+AVALIACAO CRUZADA (cada resposta foi julgada as cegas pelos outros, sem auto-avaliacao; consenso 1.00 = sempre em primeiro):
+- gpt: consenso 0.78 (posicoes [1, 2, 2], dispersao 0.47)
+    a favor: vai direto ao ponto
+    contra:  ignora o custo de escrita
+- claude: consenso 0.72 (posicoes [2, 1, 1], dispersao 0.47)
+    a favor: mede antes de opinar
+    contra:  vago no comando concreto
+- glm: consenso 0.31 (posicoes [3, 3, 3], dispersao 0.0)
+    a favor: unica ideia diferente
+    contra:  nao responde ao pedido
+
+Como sintetizar:
+- Onde o conselho concorda, afirme direto, sem citar quem disse.
+- Onde discorda, essa e a informacao mais valiosa: diga qual e a divergencia e o que decide entre as opcoes. Nao faca media entre posicoes incompativeis.
+- Uma boa ideia isolada em resposta mal colocada continua sendo uma boa ideia: aproveite.
+- Se o conselho inteiro deixou passar algo que voce sabe estar errado, corrija e diga que corrigiu.
+- Nao mencione estagios, ranking, rotulos ou o processo. Escreva a resposta final direta ao leitor, no idioma da pergunta.
+- Se a evidencia nao sustenta uma conclusao unica, diga isso em vez de fabricar confianca.

@@ -447,6 +447,52 @@ def main():
     check(ad.parse_verificacao("VEREDITOS:\n9 | ACRESCIMO | fora do intervalo", 2) == {},
           "ignora indice fora do intervalo")
 
+    print("15) golden: prompts byte a byte")
+    from pathlib import Path as _P
+    from council.prompts import chairman_prompt as _chair
+    from council.prompts import ranking_prompt as _rank
+    from council.ranking import Consensus as _Cons
+
+    # Entrada FIXA: qualquer edicao em prompts.py muda o render e o golden acusa.
+    FIX_Q = "Como acelerar esta query no Postgres?"
+    FIX_ANS = {
+        "A": "Use indice parcial no campo status.",
+        "B": "Rode VACUUM e reescreva a query com LATERAL.",
+        "C": "Meça com EXPLAIN ANALYZE antes de decidir.",
+    }
+    FIX_CONS = [
+        _Cons(member="gpt", score=0.78, positions=[1, 2, 2], ballots=3, spread=0.47,
+              strengths=["vai direto ao ponto"], weaknesses=["ignora o custo de escrita"]),
+        _Cons(member="claude", score=0.72, positions=[2, 1, 1], ballots=3, spread=0.47,
+              strengths=["mede antes de opinar"], weaknesses=["vago no comando concreto"]),
+        _Cons(member="glm", score=0.31, positions=[3, 3, 3], ballots=3, spread=0.0,
+              strengths=["unica ideia diferente"], weaknesses=["nao responde ao pedido"]),
+    ]
+    renders = {
+        "ranking.txt": _rank(FIX_Q, FIX_ANS),
+        "chairman-blind.txt": _chair(FIX_Q, FIX_ANS, FIX_CONS, blind=True),
+        "chairman-open.txt": _chair(FIX_Q, FIX_ANS, FIX_CONS, blind=False),
+    }
+
+    def _divergencia(a: str, b: str) -> str:
+        i = next((k for k in range(min(len(a), len(b))) if a[k] != b[k]),
+                 min(len(a), len(b)))
+        return (f"primeira divergencia no char {i}: golden "
+                f"{a[max(0, i - 25):i + 25]!r} vs atual {b[max(0, i - 25):i + 25]!r}")
+
+    gdir = _P(__file__).resolve().parent / "golden"
+    for nome, texto in sorted(renders.items()):
+        alvo = gdir / nome
+        if alvo.is_file():
+            base = alvo.read_text(encoding="utf-8")
+            check(base == texto,
+                  f"{nome}: prompt atual identico ao golden (byte a byte)"
+                  + ("" if base == texto else f" — {_divergencia(base, texto)}"))
+        else:
+            gdir.mkdir(exist_ok=True)
+            alvo.write_text(texto, encoding="utf-8")
+            check(True, f"{nome}: baseline gravado (bootstrap)")
+
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")

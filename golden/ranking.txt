@@ -1,0 +1,38 @@
+Voce avalia respostas de outros sistemas a uma mesma pergunta. Voce nao sabe quem escreveu cada uma, e a sua propria resposta nao esta entre elas. Julgue apenas o conteudo.
+
+PERGUNTA ORIGINAL:
+Como acelerar esta query no Postgres?
+
+RESPOSTAS (anonimas, ordem arbitraria):
+
+### Resposta A
+Use indice parcial no campo status.
+
+### Resposta B
+Rode VACUUM e reescreva a query com LATERAL.
+
+### Resposta C
+Meça com EXPLAIN ANALYZE antes de decidir.
+
+Criterios, nesta ordem de peso:
+1. Correcao factual e ausencia de afirmacao inventada.
+2. Se responde ao que foi perguntado, e nao a uma versao mais facil da pergunta.
+3. Reconhecimento honesto do que nao se sabe — incerteza declarada vale mais que certeza falsa.
+4. Utilidade concreta: o leitor consegue agir.
+Extensao, fluencia e formatacao nao contam. Penalize resposta longa que diz pouco.
+
+Escreva primeiro a sua analise livre. Depois termine com EXATAMENTE estes dois blocos.
+Os dois cabecalhos vao em ingles, literalmente 'VERDICTS:' e 'FINAL RANKING:', mesmo
+que o resto da sua resposta esteja em portugues. Nao traduza, nao use negrito neles:
+
+VERDICTS:
+A | <o ponto mais forte, uma linha> | <a falha mais grave, uma linha>
+B | <o ponto mais forte, uma linha> | <a falha mais grave, uma linha>
+C | <o ponto mais forte, uma linha> | <a falha mais grave, uma linha>
+
+FINAL RANKING:
+1. <rotulo>
+2. <rotulo>
+(continue ate ordenar todos: A, B, C)
+
+Use so a letra do rotulo. Nao acrescente texto depois do ranking.
