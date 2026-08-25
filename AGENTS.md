@@ -35,6 +35,22 @@ Detalhe completo: comentário "Rotina de bastão" no épico #1. Resumo operacion
 3. **Ciclo**: issue-start → issue-review → GATE HUMANO ("ship it" explícito) →
    issue-finish.
 
+## Bootstrap de sessão fria (zero contexto)
+
+O operador diz apenas `execute a #N`. Desta raiz, em ordem:
+
+1. `git pull origin master` no repo; confirmar repo/branch default (`gh repo view`).
+2. Ler este `AGENTS.md` inteiro.
+3. Ler o épico #1 (grafo + comentário "Rotina de bastão") e a issue #N — verificar
+   se a diretiva já está postada nos comentários.
+4. Pré-voo (acima). Sem diretiva postada: escrever e PARAR para aprovação nomeada.
+   Com diretiva postada e o operador citando a issue: implementar.
+5. Ciclo completo (issue-start → implementar → suite exit 0 → issue-review com
+   segundo agente → PARAR no "ship it" → issue-finish + cleanup).
+
+Nada além disso é preciso: as camadas AGENTS.md → épico #1 → handoffs → diretiva
+carregam todo o estado. Nenhuma sessão anterior, vault ou memória é requerida.
+
 ## Handoff obrigatório
 
 Todo PR de código carrega `docs/handoffs/issue-N.md` (≤ 35 linhas):
