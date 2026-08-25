@@ -2,14 +2,13 @@
 PR #22 · branch issue/7-candidatos (código em fdddcfa19aed) · 2026-08-25
 
 ## O que mudou no repo
-- `council/engine.py`: `Candidate(id, text, author)`, `_distill()` (scrubado→candidatos), `stage2`/`_rank_one` sobre candidatos com `exclude_self_rank` por author, criteria do perfil no ranking, `borda` por id, limiar e aviso contando candidatos.
-- `test_offline.py`: seção 20 (10 checks: determinismo seed fixa, ids==nomes sem perfil, 12 candidatos questions, balanceamento, cédulas sem questões próprias, sem vazamento de nome em ids).
+- `council/engine.py`: `Candidate(id, text, author)`, `_distill()` (scrubado→candidatos), `stage2`/`_rank_one` sobre candidatos com `exclude_self_rank` por author, **avaliadores = respondentes do estágio 1** (`answerers`), cédula com <2 elegíveis nasce inválida com erro nomeado ("minimo 2"), criteria do perfil no ranking, `borda` por id, limiar e aviso contando candidatos.
+- `test_offline.py`: seção 20 (19 checks: identidade byte a byte com a construção pré-refactor, cegamento de texto, autor único, 2+1 questões, determinismo).
 
 ## Decisões tomadas em voo (fora do plano)
-- Texto do candidato question = `pergunta\nRecomendacao: <rec>` — a recomendação FAZ PARTE do candidato (o par pergunta+recomendação é o que se ranqueia).
-- Id `q<idx>-<n>`: idx = índice do membro na lista `members` (estável dentro do run, sem nome).
-- Aviso do limiar reescrito para "3+ candidatos" (a checagem da seção 9 casa por substring "estagio 2 pulado", inalterada).
-- Membro cujo bloco QUESTIONS não parseia → aviso nomeado "destilacao: <nome>: <erro>" e zero candidatos dele (falha nunca silenciosa).
+- **Avaliadores = quem respondeu** (não autores de candidatos): autor único tem cédula inválida nomeada; os outros respondentes avaliam normalmente — desacoplamento de papéis de verdade.
+- **Cédula de 1 elegível é inválida por nascedença** ("apenas N candidato elegivel... minimo 2"): o Borda descartaria k<2 em silêncio; agora o descarte é nomeado no ballot E no warnings.
+- Texto do candidato question = `pergunta\nRecomendacao: <rec>`; id `q<idx>-<n>` (idx = índice do membro em `members`); membro sem bloco QUESTIONS → aviso "destilacao:" nomeado.
 
 ## Pegadinhas descobertas
 - O mock de falha da seção 9 permanece ativo até o fim da suite (glm falha no estágio 1) — asserts posteriores sobre "todos os membros" veem 3, não 4.

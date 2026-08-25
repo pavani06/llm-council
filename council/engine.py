@@ -170,11 +170,12 @@ class Council:
         s = self.cfg.settings
         elegiveis = [c for c in candidates
                      if not (s.exclude_self_rank and c.author == ranker.name)]
-        if not elegiveis:
-            # avaliador sem nada a julgar (todos os candidatos sao dele): cedula
-            # invalida com motivo nomeado, nao prompt vazio nem silencio.
+        if len(elegiveis) < 2:
+            # um unico candidato nao e ranking comparavel; o Borda descartaria
+            # a cedula em silencio — aqui ela nasce invalida com motivo.
             ballot = Ballot(ranker=ranker.name, label_to_member={}, raw="",
-                            ok=False, error="sem candidatos a avaliar apos auto-exclusao")
+                            ok=False,
+                            error=f"apenas {len(elegiveis)} candidato elegivel apos auto-exclusao (minimo 2)")
             self.progress("stage2", f"{ranker.name}: {ballot.error}")
             return ballot
         mapping = assign_blind_labels(

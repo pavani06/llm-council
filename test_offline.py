@@ -963,11 +963,37 @@ stage1_format = "questions"
         c1 = r_1a.consensus
         check(len(c1) == 3 and all(x["ballots"] == 3 for x in c1),
               f"autor unico: 3 candidatos, cada um avaliado pelos OUTROS 3 respondentes ({[(x['member'], x['ballots']) for x in c1]})")
-        check(any("sem candidatos a avaliar" in b["error"] for b in r_1a.stage2
-                  if b["ranker"] == "gpt"),
-              "cedula do autor unico invalidada com motivo nomeado (auto-exclusao total)")
+        gpt_b = next(b for b in r_1a.stage2 if b["ranker"] == "gpt")
+        check(not gpt_b["ok"] and "minimo 2" in gpt_b["error"],
+              f"cedula do autor unico invalidada com motivo nomeado ({gpt_b['error']})")
         check(sum("destilacao:" in w for w in r_1a.warnings) == 3,
               f"3 membros sem bloco QUESTIONS geraram aviso nomeado cada ({r_1a.warnings})")
+
+        # regressao da 2a rodada: cedula de candidato UNICO nasce invalida nomeada
+        # (o Borda a descartaria em silencio), nunca ok com ranking de 1 item
+        def chat_2mais1(self, model, messages, **kw):
+            p = messages[0]["content"]
+            if "FINAL RANKING" in p:
+                return fake_chat(self, model, messages, **kw)
+            if "preside um conselho" in p:
+                return Reply(ok=True, content="SINTESE", usage=Usage(5, 5))
+            if "QUESTIONS:" in p and model in ("gpt-5.6-terra", "deepseek-v4-pro"):
+                n = 2 if model == "gpt-5.6-terra" else 1
+                qs = "\n".join(f"{j + 1} | questao {j + 1}? | rec {j + 1}" for j in range(n))
+                return Reply(ok=True, content=f"QUESTIONS:\n{qs}", usage=Usage(5, 5))
+            return Reply(ok=True, content="prosa", usage=Usage(5, 5))
+
+        Endpoint.chat = chat_2mais1
+        AnthropicEndpoint.chat = chat_2mais1
+        r_21 = Council(cfg20).run(_Del2("q?", profile=_Prof2(name="u21", stage1_format="questions")))
+        por21 = {x["member"]: x["ballots"] for x in r_21.consensus}
+        check(por21 == {"q0-1": 3, "q0-2": 3, "q1-1": 2},
+              f"2 autores (2+1 questoes): gpt conta 3 cedulas, deepseek 2 ({por21})")
+        gpt21 = next(b for b in r_21.stage2 if b["ranker"] == "gpt")
+        check(not gpt21["ok"] and "minimo 2" in gpt21["error"],
+              f"cedula de candidato unico invalida com motivo ({gpt21['error']})")
+        check(any("descartada" in w and "minimo 2" in w for w in r_21.warnings),
+              f"descarte da cedula unica e avisado ({[w for w in r_21.warnings if 'descartada' in w]})")
     finally:
         Endpoint.chat, AnthropicEndpoint.chat = orig_e2, orig_a2
 
