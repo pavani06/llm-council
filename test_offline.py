@@ -685,6 +685,7 @@ stage1_format = "questions"
     check(cfgmod.load(Path(__file__).parent / "council.toml").profiles == {},
           "council.toml atual (sem perfis) carrega com profiles vazio")
 
+
     # regressoes de probes adversariais (review): tipo errado em roles/criteria
     # e containers malformados nunca viram crash nem aceitacao silenciosa
     tipo_errado = [
@@ -712,6 +713,59 @@ stage1_format = "questions"
         except ValueError as ex:
             check(msg in str(ex), f"erro nomeado: {msg} ({str(ex)[:55]})")
 
+    print("17) prompts parametrizados")
+    from council.prompts import DEFAULT_CRITERIA as _DC
+    from council.prompts import decision_prompt as _dec
+    from council.prompts import stage1_user_prompt as _s1
+
+    check(len(_DC) == 4 and _DC[0].startswith("Correcao factual"),
+          f"DEFAULT_CRITERIA sao os 4 literais ({len(_DC)})")
+    custom = _rank("pergunta?", {"A": "r1"}, criteria=("so isto importa",))
+    check("1. so isto importa" in custom and "Correcao factual" not in custom,
+          "criterios custom renderizam e o default nao aparece")
+    check(_rank("pergunta?", {"A": "r1"}) == _rank("pergunta?", {"A": "r1"}, criteria=_DC),
+          "default do parametro e DEFAULT_CRITERIA (fonte unica)")
+
+    cons2 = [
+        _Cons(member="A", score=0.8, positions=[1, 1], ballots=2, spread=0.0,
+              strengths=["boa"], weaknesses=["curta"]),
+        _Cons(member="B", score=0.4, positions=[2, 2], ballots=2, spread=0.0,
+              strengths=["cuidadosa"], weaknesses=["vaga"]),
+    ]
+    try:
+        _chair("q?", {"A": "x"}, cons2, blind=True, mode="ditador")
+        check(False, "modo desconhecido deveria reclamar")
+    except ValueError as ex:
+        check("synthesizer ou decider" in str(ex), f"modo invalido nomeado ({ex})")
+
+    dec = _dec("q?", {"A": "fazer X", "B": "fazer Y"}, cons2, divided=False)
+    delegado = _chair("q?", {"A": "fazer X", "B": "fazer Y"}, cons2, blind=True,
+                      mode="decider", divided=False)
+    check(dec == delegado, "mode=decider delega para decision_prompt")
+    check("DECISION:" in dec and "STATUS | ESCOLHA | CONFIANCA | DISSIDENCIAS | FUNDAMENTOS" in dec,
+          "bloco DECISION com a linha de 5 campos")
+    check("A, B" in dec, f"rotulos validos listados ({dec[-400:-300]})")
+    check("'nenhuma' conta como valor" in dec, "marca para ausencia de dissidencias")
+    dec_div = _dec("q?", {"A": "x", "B": "y"}, cons2, divided=True)
+    check("DIVIDIDO" in dec_div and "ENCALHADO" in dec_div,
+          "divided exige ENCALHADO com sintese do impasse")
+
+    q5 = "Qual o proximo passo?"
+    check(_s1(q5) == q5, "sem bundle e prose devolve a pergunta inalterada")
+    check(_s1(q5, None, "questions") == _s1(q5, None, "questions"), "chamada estavel")
+    with_bundle = _s1(q5, "plano: fase 1", "prose")
+    check("plano: fase 1" in with_bundle and "QUESTIONS:" not in with_bundle
+          and "PROPOSAL:" not in with_bundle, "bundle entra e prose nao ganha diretriz")
+    check("QUESTIONS:" in _s1(q5, "ctx", "questions"), "questions injeta diretriz do bloco")
+    check("PROPOSAL:" in _s1(q5, "ctx", "proposal") and "TITULO:" in _s1(q5, "ctx", "proposal"),
+          "proposal injeta diretriz com TITULO/CORPO")
+    try:
+        _s1(q5, None, "poema")
+        check(False, "formato desconhecido deveria reclamar")
+    except ValueError as ex:
+        check("prose, questions ou proposal" in str(ex), f"formato invalido nomeado ({ex})")
+
+    print()
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")
