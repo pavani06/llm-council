@@ -13,9 +13,10 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from .config import Config, Member
-from .prompts import chairman_prompt, ranking_prompt, stage1_user_prompt
+from .prompts import DEFAULT_CRITERIA, chairman_prompt, ranking_prompt, stage1_user_prompt
 from .provenance import seal
 from .providers import Reply
+from .structured import parse_questions
 from .ranking import (
     Ballot,
     assign_blind_labels,
@@ -42,6 +43,37 @@ class Deliberation:
     profile: Any = None            # config.Profile | None
     bundle: str | None = None
     run_refs: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Candidate:
+    """Item ranqueavel no estagio 2. No caminho sem perfil, id = author = nome
+    do membro (shape do registro identico ao historico); com questions, cada
+    questao destilada e um candidato proprio."""
+
+    id: str
+    text: str
+    author: str
+
+
+def _distill(blind_answers: dict[str, str], stage1_format: str,
+             member_index: dict[str, int]) -> tuple[list[Candidate], list[str]]:
+    """Respostas ja cegas -> candidatos. questions destila cada questao; parse
+    falho vira aviso nomeado, nao silencio."""
+    avisos: list[str] = []
+    out: list[Candidate] = []
+    for name, txt in blind_answers.items():
+        if stage1_format != "questions":
+            out.append(Candidate(id=name, text=txt, author=name))
+            continue
+        questoes, erro = parse_questions(txt, 5)
+        if erro:
+            avisos.append(f"destilacao: {name}: {erro}")
+            continue
+        for q in questoes:
+            texto = f"{q['pergunta']}\nRecomendacao: {q['recomendacao']}"
+            out.append(Candidate(id=f"q{member_index[name]}-{q['id']}", text=texto, author=name))
+    return out, avisos
 
 
 @dataclass
@@ -131,15 +163,20 @@ class Council:
         ranker: Member,
         index: int,
         question: str,
-        answers: dict[str, str],
+        candidates: list[Candidate],
         seed: int,
+        criteria=DEFAULT_CRITERIA,
     ) -> Ballot:
         s = self.cfg.settings
-        candidates = [n for n in answers if not (s.exclude_self_rank and n == ranker.name)]
+        elegiveis = [c for c in candidates
+                     if not (s.exclude_self_rank and c.author == ranker.name)]
         mapping = assign_blind_labels(
-            candidates, seed=seed, ranker_index=index, shuffle=s.shuffle_labels
+            [c.id for c in elegiveis], seed=seed, ranker_index=index, shuffle=s.shuffle_labels
         )
-        prompt = ranking_prompt(question, {lbl: answers[name] for lbl, name in mapping.items()})
+        por_rotulo = {}
+        for lbl, cid in mapping.items():
+            por_rotulo[lbl] = next(c.text for c in elegiveis if c.id == cid)
+        prompt = ranking_prompt(question, por_rotulo, criteria=criteria)
         ep = self.cfg.endpoint(ranker.provider)
         reply = ep.chat(
             ranker.model,
@@ -167,14 +204,16 @@ class Council:
         return ballot
 
     def stage2(
-        self, question: str, answers: dict[str, str], members: list[Member], seed: int
+        self, question: str, candidates: list[Candidate], members: list[Member], seed: int,
+        criteria=DEFAULT_CRITERIA,
     ) -> list[Ballot]:
-        rankers = [m for m in members if m.name in answers]
+        rankers = [m for m in members if m.name in {c.author for c in candidates}]
         self.progress("stage2", f"{len(rankers)} avaliadores, cegos e sem auto-avaliacao")
         with ThreadPoolExecutor(max_workers=max(1, len(rankers))) as pool:
             return list(
                 pool.map(
-                    lambda pair: self._rank_one(pair[1], pair[0], question, answers, seed),
+                    lambda pair: self._rank_one(pair[1], pair[0], question, candidates,
+                                                seed, criteria),
                     enumerate(rankers),
                 )
             )
@@ -279,10 +318,19 @@ class Council:
             rec.elapsed_s = time.monotonic() - t0
             return rec
 
+        # Destilacao: respostas cegas viram candidatos (questions: uma questao =
+        # um candidato; demais formatos: uma resposta = um candidato).
+        fmt = spec.profile.stage1_format if spec.profile else "prose"
+        member_index = {m.name: i for i, m in enumerate(members)}
+        candidates, avisos_destilacao = _distill(blind_answers, fmt, member_index)
+        rec.warnings.extend(avisos_destilacao)
+
         # estagio 2
         consensus = []
-        if not skip_ranking and len(answers) >= 3:
-            ballots = self.stage2(question, blind_answers, members, seed)
+        if not skip_ranking and len(candidates) >= 3:
+            criteria = (spec.profile.criteria if spec.profile and spec.profile.criteria
+                        else DEFAULT_CRITERIA)
+            ballots = self.stage2(question, candidates, members, seed, criteria)
             rec.stage2 = [
                 {
                     "ranker": b.ranker,
@@ -302,7 +350,7 @@ class Council:
                     rec.warnings.append(f"estagio 2: cedula de {b.ranker} descartada — {b.error}{extra}")
                 elif b.truncated:
                     rec.warnings.append(f"estagio 2: cedula de {b.ranker} veio truncada por max_tokens")
-            consensus = borda(ballots, list(answers))
+            consensus = borda(ballots, [c.id for c in candidates])
             rec.consensus = [asdict(c) for c in consensus]
             rec.divided = divided(consensus)
             if rec.divided:
@@ -311,7 +359,7 @@ class Council:
                 )
         elif not skip_ranking:
             rec.warnings.append(
-                f"estagio 2 pulado: com auto-exclusao sao necessarias 3+ respostas validas (havia {len(answers)})"
+                f"estagio 2 pulado: com auto-exclusao sao necessarios 3+ candidatos (havia {len(candidates)})"
             )
 
         # estagio 3

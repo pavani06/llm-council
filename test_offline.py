@@ -849,6 +849,62 @@ stage1_format = "questions"
     finally:
         Endpoint.chat, AnthropicEndpoint.chat = orig_e, orig_a
 
+    print("20) engine: candidatos destilados")
+    from council.config import Profile as _Prof2
+    from council.engine import Deliberation as _Del2
+
+    cfg20 = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg20.has_key = lambda p: True
+    cfg20.settings.seed = 7
+
+    r_a = Council(cfg20).run("pergunta deterministica?")
+    r_b = Council(cfg20).run(_Del2("pergunta deterministica?"))
+    check([c["member"] for c in r_a.consensus] == [c["member"] for c in r_b.consensus]
+          and [c["score"] for c in r_a.consensus] == [c["score"] for c in r_b.consensus],
+          "com seed fixa, run(str) e run(Deliberation) dao consensus identico")
+    nomes = {m["name"] for m in r_a.members}
+    check(all(c["member"] in nomes and "-" not in c["member"] for c in r_a.consensus),
+          f"sem perfil, ids de candidato sao nomes de membro ({[c['member'] for c in r_a.consensus]})")
+
+    def chat_questions(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            return fake_chat(self, model, messages, **kw)
+        if "preside um conselho" in p:
+            return Reply(ok=True, content="SINTESE", usage=Usage(5, 5))
+        idx = {"gpt-5.6-terra": 0, "deepseek-v4-pro": 1, "claude-opus-5": 2, "glm-5.3": 3}.get(model)
+        qs = "\n".join(f"{j + 1} | questao {idx}-{j + 1} do membro {idx}? | recomenda {j + 1}"
+                       for j in range(3))
+        return Reply(ok=True, content=f"analise\n\nQUESTIONS:\n{qs}", usage=Usage(5, 5))
+
+    orig_e2, orig_a2 = Endpoint.chat, AnthropicEndpoint.chat
+    Endpoint.chat = chat_questions
+    AnthropicEndpoint.chat = chat_questions
+    try:
+        prof_q = _Prof2(name="grill", roles={}, stage1_format="questions",
+                        criteria=["load-bearingness"])
+        r_q = Council(cfg20).run(_Del2("qual o proximo passo?", profile=prof_q))
+        cands = {c["member"] for c in r_q.consensus}
+        check(len(cands) == 12, f"12 candidatos (4 membros x 3 questoes) (foi {len(cands)})")
+        check(all(cid.startswith("q") and "-" in cid for cid in cands),
+              f"ids de questao no formato q<idx>-<n> ({sorted(cands)[:3]}…)")
+        por_cand = {c["member"]: c["ballots"] for c in r_q.consensus}
+        check(len(set(por_cand.values())) == 1,
+              f"balanceado: todo candidato em N-1 cedulas ({set(por_cand.values())})")
+        for b in r_q.stage2:
+            autorias = {f"q{i}-{n}" for i, n in
+                        (tuple(x.split("-")) for x in b["label_to_member"].values())}
+            proprio = {f"q{['gpt','deepseek','claude','glm'].index(b['ranker'])}-{n}"
+                       for n in "123"}
+            check(not (autorias & proprio),
+                  f"cedula de {b['ranker']} sem questoes proprias")
+        vazou = [t for t in ("gpt", "deepseek", "claude", "glm") for b in r_q.stage2
+                 for lbl, cid in b["label_to_member"].items() if t in cid]
+        check(not vazou, "ids de candidato nao carregam nome de membro")
+        r_sem_bloco = None
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e2, orig_a2
+
     print()
     print()
     if FALHAS:
