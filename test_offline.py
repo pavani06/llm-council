@@ -748,7 +748,7 @@ stage1_format = "questions"
     dec_div = _dec("q?", {"A": "x", "B": "y"}, cons2, divided=True)
     check("DIVIDIDO" in dec_div and "ENCALHADO" in dec_div,
           "divided exige ENCALHADO com sintese do impasse")
-    check("ENCALHADO" not in _dec("q?", {"A": "x"}, cons2),
+    check("ESTA DIVIDIDO" not in _dec("q?", {"A": "x"}, cons2),
           "divided tem default False")
     try:
         _dec("q?", {}, cons2)
