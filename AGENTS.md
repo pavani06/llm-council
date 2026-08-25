@@ -89,5 +89,9 @@ arquivo ANTES do plano.
 
 - Plano aprovado (Momus OKAY): `docs/plans/2026-08-25-fase1-perfis-de-deliberacao.md`
   (cópia de revisão em `.omo/plans/`; canônico é o de `docs/`).
+- Loop de execução em lote (issues restantes da cadeia principal): runbook
+  `docs/plans/2026-08-25-loop-relay.md` + issue #18 (label `loop`). Lançamento
+  exige a frase do operador que nomeia runbook + issue + segmento e os gates
+  delegados (template na §7 do runbook); sem ela, é execução individual, não lote.
 - Épico e grafo de dependências: issue #1. Cópia local do plano pode estar atrás do
   GitHub; em dúvida, o GitHub manda.
