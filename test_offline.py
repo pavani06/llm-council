@@ -504,6 +504,60 @@ def main():
             alvo.write_bytes(texto.encode("utf-8"))
             check(True, f"{nome}: baseline gravado (bootstrap)")
 
+    print("18) parser estruturado (modulo folha)")
+    from council.structured import parse_decision as _pd
+    from council.structured import parse_proposal as _pp
+    from council.structured import parse_questions as _pq
+
+    # QUESTIONS bem-formado
+    qs, e = _pq("analise livre\n\nQUESTIONS:\n1 | trocar o driver? | manter, o ganho nao paga\n2 | particionar? | sim, pela data", 3)
+    check(e == "" and len(qs) == 2, f"duas questoes parseadas ({e})")
+    check(qs[0] == {"id": "1", "pergunta": "trocar o driver?",
+                    "recomendacao": "manter, o ganho nao paga"}, f"campos completos ({qs[0]})")
+    # id fora do intervalo ignorado, como o parser de verificacao faz
+    qs, _ = _pq("QUESTIONS:\n1 | a? | b\n9 | fora? | fora", 3)
+    check(len(qs) == 1 and qs[0]["id"] == "1", f"id fora de max_n ignorado ({qs})")
+    # variante real: cabecalho traduzido e negrito no numero
+    qs, e = _pq("texto\n\n**PERGUNTAS:**\n**1** | usar indice parcial? | sim", 3)
+    check(e == "" and qs[0]["pergunta"] == "usar indice parcial?", f"cabecalho traduzido e negrito ({e})")
+    # linha pela metade (um pipe so) fica de fora, nao vira questao incompleta
+    qs, e = _pq("QUESTIONS:\n1 | pergunta sem recomendacao", 3)
+    check(qs == [] and "nenhuma linha" in e, f"linha destruida nao e questao ({e})")
+    # sem bloco
+    qs, e = _pq("resposta sem bloco algum", 3)
+    check(qs == [] and "ausente" in e, f"bloco ausente e erro nomeado ({e})")
+
+    # PROPOSAL bem-formado
+    p, e = _pp("contexto\n\nPROPOSAL:\nTITULO: indice parcial em status\nCORPO:\nCriar indice onde status='ativo'.\nCusto de escrita sobe pouco.")
+    check(e == "" and p["titulo"] == "indice parcial em status", f"titulo extraido ({e})")
+    check("Criar indice" in p["corpo"] and "pouco." in p["corpo"], f"corpo multi-linha inteiro ({p['corpo'][:40]}…)")
+    p, e = _pp("PROPOSTA:\n**TÍTULO:** x\n**CORPO:**\ny")
+    check(e == "" and p["titulo"] == "x" and p["corpo"] == "y", f"variantes com acento e negrito ({e})")
+    p, e = _pp("PROPOSAL:\nCORPO:\nsem titulo")
+    check(p == {} and "TITULO ausente" in e, f"campo faltando e erro nomeado ({e})")
+
+    # DECISION bem-formado
+    d, e = _pd("bla\n\nDECISION:\nDECIDIDO | op2 | alta | nenhuma | consenso converge para op2", ["op1", "op2", "op3"])
+    check(e == "" and d["status"] == "DECIDIDO" and d["escolha"] == "op2", f"decisao completa ({e})")
+    check(d["confianca"] == "alta" and d["dissidencias"] == "nenhuma", "campos livres preservados")
+    # pipe extra dentro de fundamentos nao destrroi o parse
+    d, e = _pd("DECISION:\nENCALHADO | op1 | baixa | glm sustenta op3 | tabela|com|pipes", ["op1", "op3"])
+    check(e == "" and d["fundamentos"] == "tabela|com|pipes", f"pipes extras ficam no ultimo campo ({d})")
+    # variantes: cabecalho traduzido, minusculo, ponto final
+    d, e = _pd("DECISAO:\ndecidido. | op1 | media | - | ok", ["op1"])
+    check(e == "" and d["status"] == "DECIDIDO", f"minusculo e ponto tolerados ({e})")
+    # status invalido
+    d, e = _pd("DECISION:\nTALVEZ | op1 | alta | - | x", ["op1"])
+    check(d == {} and "status invalido" in e, f"status fora da lista e erro nomeado ({e})")
+    # escolha fora dos ids validos
+    d, e = _pd("DECISION:\nDECIDIDO | op9 | alta | - | x", ["op1", "op2"])
+    check(d == {} and "ids validos" in e, f"escolha invalida e erro nomeado ({e})")
+    # formato quebrado devolve erro, nao inventa decisao
+    d, e = _pd("DECISION:\ndecisao em prosa sem pipes", ["op1"])
+    check(d == {} and "nenhuma linha" in e, "formato quebrado devolve erro, nao inventa decisao")
+    d, e = _pd("sem bloco algum", ["op1"])
+    check(d == {} and "ausente" in e, f"bloco DECISION ausente ({e})")
+
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")
