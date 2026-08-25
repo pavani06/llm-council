@@ -1,5 +1,5 @@
 # Handoff — issue #7 (T6)
-PR #<n> · branch issue/7-candidatos (código em b31abd67592d) · 2026-08-25
+PR #22 · branch issue/7-candidatos (código em b31abd67592d) · 2026-08-25
 
 ## O que mudou no repo
 - `council/engine.py`: `Candidate(id, text, author)`, `_distill()` (scrubado→candidatos), `stage2`/`_rank_one` sobre candidatos com `exclude_self_rank` por author, criteria do perfil no ranking, `borda` por id, limiar e aviso contando candidatos.
