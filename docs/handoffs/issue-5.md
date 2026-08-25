@@ -1,5 +1,5 @@
 # Handoff — issue #5 (T3)
-PR #<n-a-definir> · branch issue/5-prompts-parametrizados (código em 0e74dce22328) · 2026-08-25
+PR #20 · branch issue/5-prompts-parametrizados (código em 0e74dce22328) · 2026-08-25
 
 ## O que mudou no repo
 - `council/prompts.py`: `DEFAULT_CRITERIA` (fonte única dos 4 literais), `ranking_prompt(..., criteria=DEFAULT_CRITERIA)`, `chairman_prompt(..., mode="synthesizer", divided=False)` com tabela extraída para `_tabela_consensus` (compartilhada), `decision_prompt` nova, `stage1_user_prompt` nova, diretrizes `_STAGE1_DIRETIVAS` (questions/proposal).
