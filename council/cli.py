@@ -83,6 +83,16 @@ def cmd_ask(args) -> int:
         )
         for w in rec.warnings:
             _err(f"{DIM}aviso: {w}{RESET}")
+        try:
+            from . import audit as ad
+            from dataclasses import asdict as _asdict
+            aud = ad.auditar(_asdict(rec))
+            if aud.acrescimos:
+                n = len(aud.acrescimos)
+                _err(f"{DIM}o presidente usou termo que nenhuma resposta continha em "
+                     f"{n} trecho(s) — 'council audit' para ver{RESET}")
+        except Exception:
+            pass  # a auditoria e cortesia; nunca pode derrubar a resposta
     return 0 if rec.synthesis.get("ok") else 1
 
 
@@ -346,6 +356,98 @@ def cmd_agreement(args) -> int:
     return 0
 
 
+# -------------------------------------------------------------------- audit
+
+
+def cmd_audit(args) -> int:
+    """O que a sintese afirma que nenhuma resposta continha."""
+    from . import audit as ad
+    from . import judgment as jd
+
+    cfg = cfgmod.load(Path(args.config) if args.config else None)
+    try:
+        caminho, rec = jd.carregar(_dir_de(cfg, "runs_dir"), args.sha)
+    except jd.SemPar as e:
+        _err(str(e))
+        return 2
+
+    aud = ad.auditar(rec)
+    print(f"{BOLD}registro{RESET} {caminho.name}  ·  sha {rec.get('sha256','')[:12]}")
+    if aud.erro:
+        _err(f"nao auditavel: {aud.erro}")
+        return 2
+
+    print(f"{DIM}{aud.frases_totais} frases na sintese · {aud.termos_sintese} termos conferiveis · "
+          f"conselho: {', '.join(aud.membros)}{RESET}")
+    print()
+
+    if not aud.acrescimos:
+        print("nenhum termo especifico da sintese esta ausente de todas as respostas.")
+        print(f"{DIM}Isso NAO prova que a sintese e fiel: parafrase incorreta passa por aqui.{RESET}")
+        return 0
+
+    print(f"{BOLD}{len(aud.acrescimos)} trecho(s) com termo que nenhuma resposta continha{RESET}")
+    print()
+    for i, ac in enumerate(aud.acrescimos, start=1):
+        print(f"  {BOLD}[{i}]{RESET} termos: {', '.join(ac.termos)}")
+        for linha in _quebrar(ac.frase.strip(), 74):
+            print(f"      {linha}")
+        print()
+
+    if args.verify:
+        rc = _verificar(cfg, rec, aud)
+        if rc:
+            return rc
+
+    print(f"{DIM}O prompt do presidente manda corrigir o conselho quando ele erra em bloco —{RESET}")
+    print(f"{DIM}acrescimo pode ser a correcao pedida. Isto mostra o que ele pos por conta{RESET}")
+    print(f"{DIM}propria; quem julga e voce.{RESET}")
+    return 0
+
+
+def _quebrar(texto: str, largura: int) -> list[str]:
+    import textwrap
+    return textwrap.wrap(" ".join(texto.split()), largura) or [""]
+
+
+def _verificar(cfg, rec: dict, aud) -> int:
+    """Uma chamada a um conselheiro que NAO e o presidente, sem saber o que audita."""
+    from . import audit as ad
+
+    chair = cfg.chairman
+    candidatos = [m for m in cfg.active_members()
+                  if not (m.provider == chair.provider and m.model == chair.model)]
+    if not candidatos:
+        _err("nenhum conselheiro disponivel que nao seja o presidente — verificacao pulada")
+        return 0
+    verificador = candidatos[0]
+
+    _err(f"{DIM}verificando com {verificador.name} (cego, nao sabe que audita uma sintese)…{RESET}")
+    ep = cfg.endpoint(verificador.provider)
+    r = ep.chat(
+        verificador.model,
+        [{"role": "user", "content": ad.prompt_verificacao(rec, aud)}],
+        temperature=cfg.settings.temperature, max_tokens=cfg.settings.max_tokens,
+        timeout=cfg.settings.timeout, retries=cfg.settings.retries, params=verificador.params,
+    )
+    if not r.ok:
+        _err(f"verificacao falhou: {r.error}")
+        return 0
+
+    vered = ad.parse_verificacao(r.content, len(aud.acrescimos))
+    if not vered:
+        _err("verificador nao respondeu no formato esperado; ficam so os candidatos acima")
+        return 0
+
+    print(f"{BOLD}verificacao por {verificador.name}{RESET}")
+    for i, ac in enumerate(aud.acrescimos, start=1):
+        estado, motivo = vered.get(i, ("?", "sem veredito"))
+        marca = f"{BOLD}ACRESCIMO{RESET}" if estado == "ACRESCIMO" else "sustentada"
+        print(f"  [{i}] {marca} — {motivo}")
+    print()
+    return 0
+
+
 # --------------------------------------------------------------------- main
 
 
@@ -378,6 +480,12 @@ def build_parser() -> argparse.ArgumentParser:
     ab.add_argument("--redo", action="store_true",
                     help="substitui um veredito existente; o anterior fica encadeado dentro do novo")
     ab.set_defaults(func=cmd_ab)
+
+    au = sub.add_parser("audit", help="o que a sintese afirma que ninguem sustentou")
+    au.add_argument("sha", nargs="?", help="prefixo do sha256; sem isso, o mais recente")
+    au.add_argument("--verify", action="store_true",
+                    help="confere os candidatos com um conselheiro que nao e o presidente (1 chamada)")
+    au.set_defaults(func=cmd_audit)
 
     ag = sub.add_parser("agreement", help="taxa de concordancia entre voce e o Borda")
     ag.add_argument("--list", action="store_true", help="lista veredito a veredito")

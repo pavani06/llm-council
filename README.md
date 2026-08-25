@@ -36,6 +36,23 @@ salva só a resposta.
 ./bin/council show                    # último registro salvo
 ```
 
+### Auditoria da síntese
+
+O presidente devolve texto novo. Nada verificava que ele só afirma o que os membros sustentaram.
+`audit` procura na síntese os **termos específicos** — número, identificador, sigla, nome próprio —
+que não aparecem em resposta nenhuma:
+
+```bash
+./bin/council audit                   # último registro, varredura offline e grátis
+./bin/council audit 112012 --verify   # confere os candidatos com um conselheiro (1 chamada)
+```
+
+Duas ressalvas que definem o que isso é. **Não pontua sobreposição de palavras:** síntese boa
+parafraseia, e "palavra longa ausente" sinalizava 185 de 188 termos em teste contra os registros
+reais — puro ruído. Calibrado, fica em ~2% das frases, e o que sobra são identificadores de verdade.
+E **acréscimo nem sempre é falha:** o próprio prompt do presidente manda corrigir o conselho quando
+ele erra em bloco. O comando mostra o que ele pôs por conta própria; quem julga é você.
+
 ### Julgamento cego seu
 
 O conselho afirma qualidade por voto dos pares. Isso nunca foi conferido contra o único juiz que

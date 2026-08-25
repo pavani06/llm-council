@@ -147,11 +147,11 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
   <p class="lede">Quatro modelos de provedores diferentes respondem à mesma pergunta, avaliam-se <em>sem saber quem escreveu o quê</em>, e um presidente que não é membro do conselho sintetiza o resultado.</p>
 
   <dl class="facts">
-    <div class="fact"><dt>Módulos</dt><dd>9</dd></div>
-    <div class="fact"><dt>Linhas</dt><dd>2 206</dd></div>
+    <div class="fact"><dt>Módulos</dt><dd>10</dd></div>
+    <div class="fact"><dt>Linhas</dt><dd>2 508</dd></div>
     <div class="fact"><dt>Dependências</dt><dd>1 (SDK anthropic)</dd></div>
     <div class="fact"><dt>Conselheiros</dt><dd>4 + presidente</dd></div>
-    <div class="fact"><dt>Checagens</dt><dd>110 offline</dd></div>
+    <div class="fact"><dt>Checagens</dt><dd>131 offline</dd></div>
   </dl>
 </header>
 
@@ -390,7 +390,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
 <section>
   <div class="col">
     <span class="stage-tag">Código</span>
-    <h2>Nove módulos, um só que amarra</h2>
+    <h2>Dez módulos, um só que amarra</h2>
     <p>A dependência interna é um DAG raso e deliberado. Quatro módulos não importam nada de dentro do projeto (e um quinto importa só um) — são testáveis sem rede, sem config e sem mock. O <code>engine</code> é o único lugar onde tudo se encontra.</p>
   </div>
 
@@ -458,7 +458,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
         </g>
       </svg>
     </div>
-    <figcaption><b>A direção das setas é a razão de o teste offline existir sem mock de rede.</b> <code>ranking.py</code> concentra cegamento, parsing de cédula e Borda sem conhecer provedor, config ou HTTP — as 110 checagens exercitam a lógica que decide o resultado sem tocar em nenhuma API.</figcaption>
+    <figcaption><b>A direção das setas é a razão de o teste offline existir sem mock de rede.</b> <code>ranking.py</code> concentra cegamento, parsing de cédula e Borda sem conhecer provedor, config ou HTTP — as 131 checagens exercitam a lógica que decide o resultado sem tocar em nenhuma API.</figcaption>
   </figure>
 
   <div class="tbl-wrap">
@@ -474,6 +474,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
         <tr><td class="mono">prompts.py</td><td>Os dois prompts que você vai querer editar, isolados de propósito.</td><td class="num">96</td></tr>
         <tr><td class="mono">provenance.py</td><td>Sela no registro o commit, o hash do fonte e o retrato da config que o produziram.</td><td class="num">127</td></tr>
         <tr><td class="mono">judgment.py</td><td>Julgamento cego do operador sobre um registro, e a taxa de concordância com o Borda.</td><td class="num">190</td></tr>
+        <tr><td class="mono">audit.py</td><td>Procura na síntese os termos específicos que nenhuma resposta continha.</td><td class="num">194</td></tr>
       </tbody>
     </table>
   </div>
@@ -594,6 +595,22 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
   </div>
 </section>
 
+
+
+  <div class="note">
+    <span class="lbl">O presidente é auditável</span>
+    <p>A síntese é texto novo, e nada verificava que ela só afirma o que os membros sustentaram.
+    <code>council audit</code> varre a síntese atrás dos <strong>termos específicos</strong> — número,
+    identificador, sigla, nome próprio — ausentes de todas as respostas. Não pontua sobreposição de
+    palavras: síntese boa parafraseia, e a regra ingênua de "palavra longa ausente" sinalizou 185 de
+    188 termos contra os registros reais. Calibrada, a varredura fica em <strong>1,9% das frases</strong>,
+    e o que sobra são identificadores de verdade — num registro, a síntese citou <code>SIREAD</code>,
+    terminologia correta do PostgreSQL que <em>nenhum</em> conselheiro havia mencionado.</p>
+    <p>Acréscimo não é acusação: o prompt do presidente manda corrigir o conselho quando ele erra em
+    bloco. A varredura mostra o que ele pôs por conta própria; a decisão é do operador. Com
+    <code>--verify</code>, uma chamada a um conselheiro que não é o presidente — e que não sabe estar
+    auditando uma síntese — converte candidato em veredito.</p>
+  </div>
 
 <!-- ============ 5b. JULGAMENTO ============ -->
 <section>

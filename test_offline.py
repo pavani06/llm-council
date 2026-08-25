@@ -390,6 +390,63 @@ def main():
         _sh.rmtree(vers, ignore_errors=True)
         check(jd.apurar(vers)["taxa"] is None, "sem vereditos, taxa e None e nao zero")
 
+    print("14) auditoria da sintese contra o conselho")
+    from council import audit as ad
+
+    t = ad.termos_especificos
+    check("subject_key" in t("registra o subject_key na tabela"), "pega snake_case")
+    check("SIREAD" in t("usa registros SIREAD nao bloqueantes"), "pega SIGLA")
+    check("40001" in t("aborta com 40001"), "pega numero")
+    check("`reopen_when`" not in str(t("o campo `reopen_when` decide")) or
+          "reopen_when" in t("o campo `reopen_when` decide"), "pega crase sem as aspas")
+    check("Postgres" in t("o motor Postgres faz isso"), "pega nome proprio no meio da frase")
+    check("Comparado" not in t("Comparado a outros, isso e melhor"),
+          "NAO pega capitalizada que abre a frase")
+    check(not (t("## (b) Fragilidades e contradicoes") & {"Fragilidades"}),
+          "NAO pega palavra apos marcador markdown (era falso positivo real)")
+    check("verificado" not in t("o resultado foi verificado depois"),
+          "NAO pega palavra longa comum — era 185 de 188 alarmes antes da calibragem")
+    longo = "`" + "x" * 80 + "`"
+    check(not any(len(x) > 60 for x in t(longo)),
+          "descarta crase longa demais (artefato de frase cortada ao meio)")
+    check("cliente_id" in t("```sql\nCREATE INDEX ON t (cliente_id);\n```"),
+          "enxerga dentro de bloco cercado, pelo identificador")
+
+    base = {
+        "question": "Como acelerar a query no Postgres?",
+        "stage1": [
+            {"name": "a", "ok": True, "content": "Use indice parcial; o campo status ajuda."},
+            {"name": "b", "ok": True, "content": "Considere VACUUM e o custo de escrita."},
+        ],
+        "synthesis": {"content": "Use indice parcial com status. Rode VACUUM."},
+    }
+    a1 = ad.auditar(base)
+    check(a1.acrescimos == [], f"termo sustentado por alguma resposta nao e sinalizado ({a1.acrescimos})")
+    check(a1.membros == ["a", "b"], "lista quem respondeu")
+
+    base2 = dict(base, synthesis={"content": "Use indice parcial. Ative o flag deferred_write."})
+    a2 = ad.auditar(base2)
+    check(len(a2.acrescimos) == 1 and "deferred_write" in a2.acrescimos[0].termos,
+          f"termo ausente de todas as respostas e sinalizado ({a2.acrescimos})")
+
+    base3 = dict(base, synthesis={"content": "No Postgres, use indice parcial."})
+    check(ad.auditar(base3).acrescimos == [],
+          "termo que veio da PERGUNTA nao conta como acrescimo do presidente")
+
+    check(ad.auditar({"stage1": [], "synthesis": {"content": "x"}}).erro,
+          "registro sem respostas nao e auditavel")
+    check(ad.auditar({"stage1": base["stage1"], "synthesis": {}}).erro,
+          "registro sem sintese nao e auditavel")
+    check(ad.auditar(base).limpo, "auditoria sem acrescimo e sem erro e 'limpa'")
+
+    v = ad.parse_verificacao("bla\n\nVEREDITOS:\n1 | ACRESCIMO | ninguem citou\n2 | SUSTENTADA | fonte A", 2)
+    check(v[1][0] == "ACRESCIMO" and v[2][0] == "SUSTENTADA", f"parseia os vereditos ({v})")
+    check("ninguem citou" in v[1][1], "guarda o motivo")
+    check(ad.parse_verificacao("resposta fora de formato", 2) == {},
+          "formato quebrado devolve vazio, nao inventa veredito")
+    check(ad.parse_verificacao("VEREDITOS:\n9 | ACRESCIMO | fora do intervalo", 2) == {},
+          "ignora indice fora do intervalo")
+
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")
