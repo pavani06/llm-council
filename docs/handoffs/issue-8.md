@@ -1,5 +1,5 @@
 # Handoff — issue #8 (T7)
-PR #23 · branch issue/8-registro-decider (código em 6b7f81628014) · 2026-08-25
+PR #23 · branch issue/8-registro-decider (código em af706d4db013) · 2026-08-25
 
 ## O que mudou no repo
 - `council/engine.py`: campos aditivos no `Run` (`profile_name`, `bundle_sha256`, `run_refs`, `candidates`, `decision`) preenchidos ANTES de qualquer retorno antecipado; estágio 3 roteado por `chairman_mode` (synthesizer=default; decider via `decision_prompt` com `divided`); decider com `blind_chairman` exibe candidatos como `Candidato A/B/…` (ordem do consensus) e **des-aliasa a escolha** antes de gravar; parse falho → warning "estagio 3: decisao ilegivel — <erro>"; decider sem candidatos → warning "decisao impossivel", zero chamadas ao presidente; `save_run` nunca reescreve arquivo existente.
