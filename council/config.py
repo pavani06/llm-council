@@ -167,7 +167,19 @@ def _profile(name: str, raw: dict, member_names: set[str]) -> Profile:
     if desconhecidas:
         raise ValueError(f"{onde}: chave(s) desconhecida(s): {sorted(desconhecidas)}")
 
-    roles = dict(raw.get("roles") or {})
+    roles_raw = raw.get("roles")
+    if roles_raw is None:
+        roles = {}
+    elif isinstance(roles_raw, dict):
+        for quem, texto in roles_raw.items():
+            if not isinstance(texto, str) or not texto.strip():
+                raise ValueError(f"{onde}: papel de '{quem}' deve ser texto nao vazio")
+        roles = dict(roles_raw)
+    else:
+        raise ValueError(
+            f"{onde}: roles deve ser uma tabela membro -> texto, "
+            f"nao {type(roles_raw).__name__}"
+        )
     for quem in roles:
         if quem not in member_names:
             raise ValueError(
@@ -176,8 +188,14 @@ def _profile(name: str, raw: dict, member_names: set[str]) -> Profile:
             )
 
     criteria = raw.get("criteria")
-    if criteria is not None and not (1 <= len(criteria) <= 7):
-        raise ValueError(f"{onde}: criteria deve ter de 1 a 7 itens (tem {len(criteria)})")
+    if criteria is not None:
+        if isinstance(criteria, str) or not isinstance(criteria, list):
+            raise ValueError(f"{onde}: criteria deve ser uma lista de textos")
+        for item in criteria:
+            if not isinstance(item, str) or not item.strip():
+                raise ValueError(f"{onde}: criteria so aceita textos nao vazios")
+        if not (1 <= len(criteria) <= 7):
+            raise ValueError(f"{onde}: criteria deve ter de 1 a 7 itens (tem {len(criteria)})")
 
     mode = raw.get("chairman_mode", "synthesizer")
     if mode not in CHAIRMAN_MODES:
@@ -231,11 +249,21 @@ def load(path: Path | None = None) -> Config:
         raise ValueError(f"{path}: settings desconhecidos: {sorted(unknown)}")
     settings = Settings(**s)
 
+    raw_profiles = data.get("profiles") or {}
+    if not isinstance(raw_profiles, dict):
+        raise ValueError(
+            f"{path}: [profiles] deve ser uma tabela de perfis, "
+            f"nao {type(raw_profiles).__name__}"
+        )
     member_names = {m.name for m in members}
-    profiles = {
-        nome: _profile(nome, raw, member_names)
-        for nome, raw in (data.get("profiles") or {}).items()
-    }
+    profiles: dict[str, Profile] = {}
+    for nome, raw in raw_profiles.items():
+        if not isinstance(raw, dict):
+            raise ValueError(
+                f"{path}: [profiles.{nome}] deve ser uma tabela, "
+                f"nao {type(raw).__name__}"
+            )
+        profiles[nome] = _profile(nome, raw, member_names)
 
     return Config(
         providers=providers,

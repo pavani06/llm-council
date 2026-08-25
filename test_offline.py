@@ -685,6 +685,27 @@ stage1_format = "questions"
     check(cfgmod.load(Path(__file__).parent / "council.toml").profiles == {},
           "council.toml atual (sem perfis) carrega com profiles vazio")
 
+    # regressoes de probes adversariais (review): tipo errado em roles/criteria
+    # e containers malformados nunca viram crash nem aceitacao silenciosa
+    tipo_errado = [
+        (PERFIL_OK.replace('gpt = "cetico"', 'gpt = 123'), "papel de 'gpt' deve ser texto"),
+        (PERFIL_OK + '\n[profiles.lista]\nroles = ["gpt"]\n', "roles deve ser uma tabela"),
+        (PERFIL_OK + '\n[profiles.str]\ncriteria = "abc"\n', "criteria deve ser uma lista"),
+        (PERFIL_OK + '\n[profiles.misto]\ncriteria = ["ok", 123]\n', "so aceita textos"),
+        (PERFIL_OK + '\n[profiles.espaco]\ncriteria = ["  "]\n', "so aceita textos"),
+        ("profiles = 'string'\n[providers.openai]\nbase_url = 'x'\n[[council]]\nname='g'\nprovider='openai'\nmodel='m'\n"
+         "[chairman]\nprovider='openai'\nmodel='c'\n", "[profiles] deve ser uma tabela de perfis"),
+        (PERFIL_OK + '\n[[profiles.array]]\ncriteria = ["a"]\n', "[profiles.array] deve ser uma tabela"),
+        ("[providers.openai]\nbase_url = 'x'\n[[council]]\nname='g'\nprovider='openai'\nmodel='m'\n"
+         "[chairman]\nprovider='openai'\nmodel='c'\n[profiles]\nx = 123\n", "[profiles.x] deve ser uma tabela"),
+    ]
+    for texto, msg in tipo_errado:
+        try:
+            _cfg_de(texto)
+            check(False, f"malformado deveria reclamar de: {msg}")
+        except ValueError as ex:
+            check(msg in str(ex), f"erro nomeado: {msg} ({str(ex)[:55]})")
+
     print()
     if FALHAS:
         print(f"{len(FALHAS)} FALHA(S):")
