@@ -1,9 +1,9 @@
 # Handoff — issue #5 (T3)
-PR #20 · branch issue/5-prompts-parametrizados (código em 0e74dce22328) · 2026-08-25
+PR #20 · branch issue/5-prompts-parametrizados (código em 695dfa57bf3f) · 2026-08-25
 
 ## O que mudou no repo
 - `council/prompts.py`: `DEFAULT_CRITERIA` (fonte única dos 4 literais), `ranking_prompt(..., criteria=DEFAULT_CRITERIA)`, `chairman_prompt(..., mode="synthesizer", divided=False)` com tabela extraída para `_tabela_consensus` (compartilhada), `decision_prompt` nova, `stage1_user_prompt` nova, diretrizes `_STAGE1_DIRETIVAS` (questions/proposal).
-- `test_offline.py`: seção 17 (15 checks).
+- `test_offline.py`: seção 17 (18 checks).
 
 ## Decisões tomadas em voo (fora do plano)
 - `decision_prompt(question, candidates, consensus, *, divided)`: recebe candidatos JÁ rotulados (cegos ou não — quem rotula é o engine/#8); `chairman_prompt(mode="decider", divided=...)` delega para ela (assinatura compatível via answers).
