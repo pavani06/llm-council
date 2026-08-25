@@ -86,6 +86,15 @@ def config_snapshot(cfg: Any) -> dict[str, Any]:
             "name": cfg.chairman.name, "provider": cfg.chairman.provider,
             "model": cfg.chairman.model, "params": cfg.chairman.params,
         },
+        "profiles": {
+            nome: {
+                "roles": p.roles,
+                "criteria": p.criteria,
+                "chairman_mode": p.chairman_mode,
+                "stage1_format": p.stage1_format,
+            }
+            for nome, p in sorted(getattr(cfg, "profiles", {}).items())
+        },
         "settings": dict(sorted(vars(cfg.settings).items())),
     }
 

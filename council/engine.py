@@ -7,7 +7,7 @@ import json
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
@@ -16,7 +16,7 @@ from .config import Config, Member
 from .prompts import DEFAULT_CRITERIA, chairman_prompt, ranking_prompt, stage1_user_prompt
 from .provenance import seal
 from .providers import Reply
-from .structured import parse_questions
+from .structured import parse_decision, parse_questions
 from .ranking import (
     Ballot,
     assign_blind_labels,
@@ -104,6 +104,12 @@ class Run:
     usage: dict[str, int] = field(default_factory=dict)
     elapsed_s: float = 0.0
     divided: bool = False
+    # deliberacao (aditivo, defaults neutros: registro antigo le igual)
+    profile_name: str | None = None
+    bundle_sha256: str | None = None
+    run_refs: list[str] = field(default_factory=list)
+    candidates: list[dict[str, Any]] = field(default_factory=list)
+    decision: dict[str, Any] | None = None
 
     def digest(self) -> str:
         blob = json.dumps(asdict(self), sort_keys=True, ensure_ascii=False).encode()
@@ -233,11 +239,13 @@ class Council:
     # ------------------------------------------------------------- estagio 3
 
     def stage3_stream(
-        self, question: str, answers: dict[str, str], consensus, blind: bool
+        self, question: str, answers: dict[str, str], consensus, blind: bool,
+        mode: str = "synthesizer", divided: bool = False,
     ) -> Iterator[str]:
         s = self.cfg.settings
         chair = self.cfg.chairman
-        prompt = chairman_prompt(question, answers, consensus, blind=blind)
+        prompt = chairman_prompt(question, answers, consensus, blind=blind,
+                                  mode=mode, divided=divided)
         ep = self.cfg.endpoint(chair.provider)
         yield from ep.stream(
             chair.model,
@@ -248,10 +256,14 @@ class Council:
             params=chair.params,
         )
 
-    def stage3(self, question: str, answers: dict[str, str], consensus, blind: bool) -> Reply:
+    def stage3(
+        self, question: str, answers: dict[str, str], consensus, blind: bool,
+        mode: str = "synthesizer", divided: bool = False,
+    ) -> Reply:
         s = self.cfg.settings
         chair = self.cfg.chairman
-        prompt = chairman_prompt(question, answers, consensus, blind=blind)
+        prompt = chairman_prompt(question, answers, consensus, blind=blind,
+                                  mode=mode, divided=divided)
         ep = self.cfg.endpoint(chair.provider)
         return ep.chat(
             chair.model,
@@ -298,6 +310,12 @@ class Council:
             rec.elapsed_s = time.monotonic() - t0
             return rec
         rec.members = [{"name": m.name, "provider": m.provider, "model": m.model} for m in members]
+        # deliberacao: campos da spec entram no registro (aditivo)
+        if spec.profile is not None:
+            rec.profile_name = spec.profile.name
+        rec.run_refs = list(spec.run_refs)
+        if spec.bundle:
+            rec.bundle_sha256 = hashlib.sha256(spec.bundle.encode("utf-8")).hexdigest()
 
         # estagio 1
         answers_all = self.stage1(spec, members)
@@ -336,6 +354,7 @@ class Council:
         member_index = {m.name: i for i, m in enumerate(members)}
         candidates, avisos_destilacao = _distill(blind_answers, fmt, member_index)
         rec.warnings.extend(avisos_destilacao)
+        rec.candidates = [{"id": c.id, "text": c.text, "author": c.author} for c in candidates]
 
         # estagio 2
         consensus = []
@@ -375,14 +394,31 @@ class Council:
                 f"estagio 2 pulado: com auto-exclusao sao necessarios 3+ candidatos (havia {len(candidates)})"
             )
 
-        # estagio 3
-        self.progress("stage3", f"presidente {self.cfg.chairman.label} sintetizando")
-        reply = self.stage3(
-            question,
-            blind_answers if s.blind_chairman else answers,
-            consensus,
-            blind=s.blind_chairman,
-        )
+        # estagio 3: synthesizer (padrao) ou decider (perfil), uma unica chamada
+        mode = spec.profile.chairman_mode if spec.profile else "synthesizer"
+        self.progress("stage3", f"presidente {self.cfg.chairman.label} "
+                                f"{'decidindo' if mode == 'decider' else 'sintetizando'}")
+        alias_decisao: dict[str, str] = {}
+        if mode == "decider":
+            if s.blind_chairman:
+                # candidatos e tabela exibidos por rotulo cego; a decisao volta
+                # traduzida para o id real antes de entrar no registro.
+                ordenados = [c.member for c in consensus if c.ballots]
+                ordenados += [c.id for c in candidates if c.id not in ordenados]
+                for i, cid in enumerate(ordenados):
+                    alias_decisao[cid] = f"Candidato {chr(65 + i)}"
+                mostrados = {alias_decisao[c.id]: c.text for c in candidates}
+                cons_mostrado = [replace(c, member=alias_decisao.get(c.member, c.member))
+                                 for c in consensus]
+            else:
+                mostrados = {c.id: c.text for c in candidates}
+                cons_mostrado = consensus
+            reply = self.stage3(question, mostrados, cons_mostrado,
+                                blind=s.blind_chairman, mode="decider",
+                                divided=rec.divided)
+        else:
+            reply = self.stage3(question, blind_answers if s.blind_chairman else answers,
+                                consensus, blind=s.blind_chairman)
         rec.synthesis = {
             "name": self.cfg.chairman.name,
             "provider": self.cfg.chairman.provider,
@@ -392,6 +428,15 @@ class Council:
         }
         if not reply.ok:
             rec.warnings.append(f"estagio 3: presidente falhou — {reply.error}")
+        elif mode == "decider":
+            dec, derr = parse_decision(reply.content, list(alias_decisao.values()) or
+                                       [c.id for c in candidates])
+            if derr:
+                rec.warnings.append(f"estagio 3: decisao ilegivel — {derr}")
+            else:
+                if alias_decisao:
+                    dec["escolha"] = {v: k for k, v in alias_decisao.items()}[dec["escolha"]]
+                rec.decision = dec
 
         rec.usage = _total_usage(rec)
         rec.elapsed_s = round(time.monotonic() - t0, 2)
