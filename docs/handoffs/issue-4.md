@@ -1,5 +1,5 @@
 # Handoff — issue #4 (T2)
-PR #19 · branch issue/4-config-perfis (código em c5eedc93fb24) · 2026-08-25
+PR #19 · branch issue/4-config-perfis (código em d0ab7ec1dcd0) · 2026-08-25
 
 ## O que mudou no repo
 - `council/config.py`: dataclass `Profile`, constantes `CHAIRMAN_MODES`/`STAGE1_FORMATS`, `_profile()` validador, `Config.profiles`, parsing de `[profiles.<nome>]`, TOML inválido re-empacotado como `ValueError` nomeado.
