@@ -695,6 +695,12 @@ stage1_format = "questions"
         (PERFIL_OK + '\n[profiles.espaco]\ncriteria = ["  "]\n', "so aceita textos"),
         ("profiles = 'string'\n[providers.openai]\nbase_url = 'x'\n[[council]]\nname='g'\nprovider='openai'\nmodel='m'\n"
          "[chairman]\nprovider='openai'\nmodel='c'\n", "[profiles] deve ser uma tabela de perfis"),
+        ("profiles = ''\n[providers.openai]\nbase_url = 'x'\n[[council]]\nname='g'\nprovider='openai'\nmodel='m'\n"
+         "[chairman]\nprovider='openai'\nmodel='c'\n", "[profiles] deve ser uma tabela de perfis"),
+        ("profiles = []\n[providers.openai]\nbase_url = 'x'\n[[council]]\nname='g'\nprovider='openai'\nmodel='m'\n"
+         "[chairman]\nprovider='openai'\nmodel='c'\n", "[profiles] deve ser uma tabela de perfis"),
+        ("profiles = false\n[providers.openai]\nbase_url = 'x'\n[[council]]\nname='g'\nprovider='openai'\nmodel='m'\n"
+         "[chairman]\nprovider='openai'\nmodel='c'\n", "[profiles] deve ser uma tabela de perfis"),
         (PERFIL_OK + '\n[[profiles.array]]\ncriteria = ["a"]\n', "[profiles.array] deve ser uma tabela"),
         ("[providers.openai]\nbase_url = 'x'\n[[council]]\nname='g'\nprovider='openai'\nmodel='m'\n"
          "[chairman]\nprovider='openai'\nmodel='c'\n[profiles]\nx = 123\n", "[profiles.x] deve ser uma tabela"),

@@ -249,12 +249,16 @@ def load(path: Path | None = None) -> Config:
         raise ValueError(f"{path}: settings desconhecidos: {sorted(unknown)}")
     settings = Settings(**s)
 
-    raw_profiles = data.get("profiles") or {}
-    if not isinstance(raw_profiles, dict):
-        raise ValueError(
-            f"{path}: [profiles] deve ser uma tabela de perfis, "
-            f"nao {type(raw_profiles).__name__}"
-        )
+    if "profiles" in data:
+        raw_profiles = data["profiles"]
+        if not isinstance(raw_profiles, dict):
+            # 'or {}' aqui engoliria profiles = "" / [] / false / 0 sem reclamar.
+            raise ValueError(
+                f"{path}: [profiles] deve ser uma tabela de perfis, "
+                f"nao {type(raw_profiles).__name__}"
+            )
+    else:
+        raw_profiles = {}
     member_names = {m.name for m in members}
     profiles: dict[str, Profile] = {}
     for nome, raw in raw_profiles.items():
