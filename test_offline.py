@@ -852,13 +852,49 @@ stage1_format = "questions"
     print("20) engine: candidatos destilados")
     from council.config import Profile as _Prof2
     from council.engine import Deliberation as _Del2
+    from council.prompts import ranking_prompt as _rp20
+    from council.ranking import assign_blind_labels as _abl
+    from council.ranking import identity_terms as _it20
+    from council.ranking import scrub_identity as _scrub20
 
     cfg20 = cfgmod.load(Path(__file__).parent / "council.toml")
     cfg20.has_key = lambda p: True
     cfg20.settings.seed = 7
 
-    r_a = Council(cfg20).run("pergunta deterministica?")
-    r_b = Council(cfg20).run(_Del2("pergunta deterministica?"))
+    PROMPTS20 = []
+
+    def chat_cap20(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p or "preside um conselho" in p:
+            PROMPTS20.append(p)
+        return fake_chat(self, model, messages, **kw)
+
+    orig_e0, orig_a0 = Endpoint.chat, AnthropicEndpoint.chat
+    Endpoint.chat = chat_cap20
+    AnthropicEndpoint.chat = chat_cap20
+    try:
+        r_a = Council(cfg20).run("pergunta deterministica?")
+        r_b = Council(cfg20).run(_Del2("pergunta deterministica?"))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e0, orig_a0
+
+    # identidade com a construcao PRE-refactor: mesmo mapping sobre nomes,
+    # mesmo ranking_prompt com texto cego — prompt byte a byte igual.
+    RESP20 = {a["model"]: a["content"] for a in r_a.stage1}
+    membros20 = [m for m in cfg20.members]
+    termos20 = _it20(membros20, [])
+    blind20 = {m.name: _scrub20(RESP20[m.model], termos20, "pergunta deterministica?")[0]
+               for m in membros20 if m.model in RESP20}
+    rank_prompts = [p for p in PROMPTS20 if "FINAL RANKING" in p]
+    check(len(set(rank_prompts)) == len(blind20),
+          f"cedulas capturadas = respondentes ({len(set(rank_prompts))} unicas vs {len(blind20)})")
+    esperados = set()
+    for i, m in enumerate(m for m in membros20 if m.name in blind20):
+        mp = _abl([n for n in blind20 if n != m.name], seed=7, ranker_index=i, shuffle=True)
+        esperados.add(_rp20("pergunta deterministica?", {l: blind20[n] for l, n in mp.items()}))
+    check(set(rank_prompts) == esperados,
+          "prompts do estagio 2 identicos a construcao pre-refactor (byte a byte)")
+
     check([c["member"] for c in r_a.consensus] == [c["member"] for c in r_b.consensus]
           and [c["score"] for c in r_a.consensus] == [c["score"] for c in r_b.consensus],
           "com seed fixa, run(str) e run(Deliberation) dao consensus identico")
@@ -866,14 +902,18 @@ stage1_format = "questions"
     check(all(c["member"] in nomes and "-" not in c["member"] for c in r_a.consensus),
           f"sem perfil, ids de candidato sao nomes de membro ({[c['member'] for c in r_a.consensus]})")
 
+    QPROMPTS = []
+
     def chat_questions(self, model, messages, **kw):
         p = messages[0]["content"]
         if "FINAL RANKING" in p:
+            QPROMPTS.append(p)
             return fake_chat(self, model, messages, **kw)
         if "preside um conselho" in p:
             return Reply(ok=True, content="SINTESE", usage=Usage(5, 5))
         idx = {"gpt-5.6-terra": 0, "deepseek-v4-pro": 1, "claude-opus-5": 2, "glm-5.3": 3}.get(model)
-        qs = "\n".join(f"{j + 1} | questao {idx}-{j + 1} do membro {idx}? | recomenda {j + 1}"
+        # texto com autoidentificacao: o cegamento tem de mascarar ANTES de destilar
+        qs = "\n".join(f"{j + 1} | Como {model.split('-')[0]} vejo a questao {idx}-{j + 1}? | recomenda {j + 1}"
                        for j in range(3))
         return Reply(ok=True, content=f"analise\n\nQUESTIONS:\n{qs}", usage=Usage(5, 5))
 
@@ -884,6 +924,7 @@ stage1_format = "questions"
         prof_q = _Prof2(name="grill", roles={}, stage1_format="questions",
                         criteria=["load-bearingness"])
         r_q = Council(cfg20).run(_Del2("qual o proximo passo?", profile=prof_q))
+        ordem_autores = [m["name"] for m in r_q.members]
         cands = {c["member"] for c in r_q.consensus}
         check(len(cands) == 12, f"12 candidatos (4 membros x 3 questoes) (foi {len(cands)})")
         check(all(cid.startswith("q") and "-" in cid for cid in cands),
@@ -892,16 +933,41 @@ stage1_format = "questions"
         check(len(set(por_cand.values())) == 1,
               f"balanceado: todo candidato em N-1 cedulas ({set(por_cand.values())})")
         for b in r_q.stage2:
-            autorias = {f"q{i}-{n}" for i, n in
-                        (tuple(x.split("-")) for x in b["label_to_member"].values())}
-            proprio = {f"q{['gpt','deepseek','claude','glm'].index(b['ranker'])}-{n}"
-                       for n in "123"}
-            check(not (autorias & proprio),
+            idx_autor = ordem_autores.index(b["ranker"])
+            proprios = {f"q{idx_autor}-{n}" for n in "123"}
+            check(not (set(b["label_to_member"].values()) & proprios),
                   f"cedula de {b['ranker']} sem questoes proprias")
-        vazou = [t for t in ("gpt", "deepseek", "claude", "glm") for b in r_q.stage2
-                 for lbl, cid in b["label_to_member"].items() if t in cid]
-        check(not vazou, "ids de candidato nao carregam nome de membro")
-        r_sem_bloco = None
+        vazou = [t for t in ("gpt", "deepseek", "claude", "glm") for p in QPROMPTS if t in p]
+        check(not vazou, f"texto de candidato cegado no prompt de ranking (vazou: {vazou})")
+        check(all("[modelo]" in p for p in QPROMPTS),
+              "autoidentificacao mascarada ANTES da destilacao (marca presente)")
+
+        # autor unico: so um membro emite QUESTIONS validas; os outros respondem
+        # coisa que nao parseia — avaliadores continuam sendo todos os respondentes
+        def chat_autor_unico(self, model, messages, **kw):
+            p = messages[0]["content"]
+            if "FINAL RANKING" in p:
+                return fake_chat(self, model, messages, **kw)
+            if "preside um conselho" in p:
+                return Reply(ok=True, content="SINTESE", usage=Usage(5, 5))
+            if "QUESTIONS:" in p and model == "gpt-5.6-terra":
+                return Reply(ok=True, content="QUESTIONS:\n1 | unica questao? | sim\n2 | outra? | nao\n3 | terceira? | talvez",
+                             usage=Usage(5, 5))
+            if "QUESTIONS:" in p:
+                return Reply(ok=True, content="resposta em prosa sem bloco", usage=Usage(5, 5))
+            return Reply(ok=True, content="prosa", usage=Usage(5, 5))
+
+        Endpoint.chat = chat_autor_unico
+        AnthropicEndpoint.chat = chat_autor_unico
+        r_1a = Council(cfg20).run(_Del2("q?", profile=_Prof2(name="u", stage1_format="questions")))
+        c1 = r_1a.consensus
+        check(len(c1) == 3 and all(x["ballots"] == 3 for x in c1),
+              f"autor unico: 3 candidatos, cada um avaliado pelos OUTROS 3 respondentes ({[(x['member'], x['ballots']) for x in c1]})")
+        check(any("sem candidatos a avaliar" in b["error"] for b in r_1a.stage2
+                  if b["ranker"] == "gpt"),
+              "cedula do autor unico invalidada com motivo nomeado (auto-exclusao total)")
+        check(sum("destilacao:" in w for w in r_1a.warnings) == 3,
+              f"3 membros sem bloco QUESTIONS geraram aviso nomeado cada ({r_1a.warnings})")
     finally:
         Endpoint.chat, AnthropicEndpoint.chat = orig_e2, orig_a2
 

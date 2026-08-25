@@ -170,6 +170,13 @@ class Council:
         s = self.cfg.settings
         elegiveis = [c for c in candidates
                      if not (s.exclude_self_rank and c.author == ranker.name)]
+        if not elegiveis:
+            # avaliador sem nada a julgar (todos os candidatos sao dele): cedula
+            # invalida com motivo nomeado, nao prompt vazio nem silencio.
+            ballot = Ballot(ranker=ranker.name, label_to_member={}, raw="",
+                            ok=False, error="sem candidatos a avaliar apos auto-exclusao")
+            self.progress("stage2", f"{ranker.name}: {ballot.error}")
+            return ballot
         mapping = assign_blind_labels(
             [c.id for c in elegiveis], seed=seed, ranker_index=index, shuffle=s.shuffle_labels
         )
@@ -205,9 +212,13 @@ class Council:
 
     def stage2(
         self, question: str, candidates: list[Candidate], members: list[Member], seed: int,
-        criteria=DEFAULT_CRITERIA,
+        criteria=DEFAULT_CRITERIA, answerers: set[str] | None = None,
     ) -> list[Ballot]:
-        rankers = [m for m in members if m.name in {c.author for c in candidates}]
+        # avaliadores = quem respondeu no estagio 1; autor de candidato e papel
+        # no ranking, nao requisito para avaliar (desacoplamento de papeis).
+        if answerers is None:
+            answerers = {c.author for c in candidates}
+        rankers = [m for m in members if m.name in answerers]
         self.progress("stage2", f"{len(rankers)} avaliadores, cegos e sem auto-avaliacao")
         with ThreadPoolExecutor(max_workers=max(1, len(rankers))) as pool:
             return list(
@@ -330,7 +341,8 @@ class Council:
         if not skip_ranking and len(candidates) >= 3:
             criteria = (spec.profile.criteria if spec.profile and spec.profile.criteria
                         else DEFAULT_CRITERIA)
-            ballots = self.stage2(question, candidates, members, seed, criteria)
+            ballots = self.stage2(question, candidates, members, seed, criteria,
+                                  answerers=set(answers))
             rec.stage2 = [
                 {
                     "ranker": b.ranker,
