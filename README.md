@@ -12,6 +12,95 @@ presidente `gpt-5.6-sol`, de fora do conselho.
 Derivado do `llm-council` do Karpathy, com as correções que a versão original não tem: cegamento
 que de fato cega, agregação por Borda em vez de ranking descartado, e falha nunca silenciosa.
 
+## Guia passo a passo
+
+Uma volta completa pelo conselho, do setup ao encadeamento de deliberações. Os exemplos
+são reais — vêm das sessões que estreiaram cada comando; os shas existem em `runs/`.
+
+**1. Setup e sanidade** (uma vez):
+
+```bash
+python3 -m venv --without-pip .venv
+curl -sS https://bootstrap.pypa.io/get-pip.py | .venv/bin/python
+.venv/bin/python -m pip install -r requirements.txt
+cp .env.example .env      # suas chaves
+./bin/council doctor      # chaves, roster, perfis e o selo atual — tudo verde antes de gastar
+```
+
+**2. Primeira pergunta** (barata, ~9 chamadas): uma pergunta de resposta curta prova o
+pipeline inteiro sem custo de teto:
+
+```bash
+./bin/council ask "Em uma frase: por que Borda normalizado em vez de soma de pontos?"
+# → "Porque o Borda normalizado põe pontuações em uma escala comum…" (registro dcaefacfad61)
+```
+
+**3. Ler o registro, julgar às cegas:** o `ask` salva tudo em `runs/`. Confira se o voto
+dos pares acerta o que você escolheria sem ver autoria:
+
+```bash
+./bin/council show dcaefacfad61    # consenso, cédulas, síntese, selo do produtor
+./bin/council ab 74f19a --par gpt,glm   # duas respostas, sem autoria, ordem sorteada
+./bin/council agreement            # acumula suas escolhas contra o Borda
+```
+
+**4. Auditar a síntese** (offline e grátis): o que o presidente afirmou que nenhuma
+resposta sustentava:
+
+```bash
+./bin/council audit 74f19a         # termos específicos ausentes de todas as respostas
+```
+
+**5. Deliberar o próximo passo de um plano** (~9 chamadas, 2 GLM): acabou de executar
+uma issue e quer decidir o que vem antes de commitar? Escreva o estado em um arquivo
+— isso é o bundle — e pergunte ao `continuation`:
+
+```bash
+# estado-do-plano.md: onde o plano está, o que a execução entregou, o que pendura
+./bin/council deliberate "Qual o proximo passo desta fase?" \
+    --profile continuation --bundle estado-do-plano.md
+# → [DECIDIDO] claude — confiança alta
+#   dissidências: C e D defendem iniciar a Fase 2 antes da validação…
+```
+
+Com `--json`, o registro completo (decisão, candidatos, consensus, bundle selado) vai
+para stdout. `ENCALHADO` em vez de `DECIDIDO` não é erro: é o conselho dividido se
+declarando — trate como "suba ao operador".
+
+**6. Auditar a deliberação contra a evidência** — a conferência do bundle é por sha256;
+bundle de outra execução é recusado:
+
+```bash
+./bin/council audit 74f19a --bundle estado-do-plano.md
+```
+
+**7. Grilar um plano antes de comprometer código** (~9 chamadas por rodada): o perfil
+`grill` produz questões ranqueadas por load-bearingness, com recomendações. Duas rodadas
+reais do interrogatório que definiu o escopo da Fase 2:
+
+```bash
+./bin/council deliberate "Antes de desenhar a Fase 2, quais decisoes o operador precisa tomar?" \
+    --profile grill --bundle escopo-fase2.md
+# → registro e5957637d9ae: 26 questões em 7 seções
+
+./bin/council deliberate "Quais sub-decisoes dentro de metrica, schema e sanitizacao ainda sao do operador?" \
+    --profile grill --bundle escopo-fase2-r2.md --ref e5957637d9ae
+# → registro 6656b23a66c7, encadeado à rodada anterior por run_refs
+```
+
+**8. Como MCP no Claude Code** (as mesmas três ferramentas, sem estado — a cadeia de
+rodadas vive em quem chama):
+
+```bash
+claude mcp add council -- ~/llm-council/bin/council-mcp
+# council_ask · council_debate · council_deliberate
+```
+
+Custo de referência: `ask` e `deliberate` ≈ 2N+1 chamadas (~9 com o roster atual), das
+quais 2 GLM por questão saem da cota trimestral do coding plan. `audit`, `show`, `ab` e
+`agreement` são offline e grátis. O mapa completo da arquitetura, com os dois caminhos
+(ask e deliberação), está em `docs/arquitetura.html`.
+
 ## Uso
 
 ```bash

@@ -144,23 +144,23 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
 <header>
   <p class="eyebrow">Mapa arquitetural · ~/llm-council</p>
   <h1>Anatomia do Council</h1>
-  <p class="lede">Quatro modelos de provedores diferentes respondem à mesma pergunta, avaliam-se <em>sem saber quem escreveu o quê</em>, e um presidente que não é membro do conselho sintetiza o resultado.</p>
+  <p class="lede">Quatro modelos de provedores diferentes respondem à mesma pergunta, avaliam-se <em>sem saber quem escreveu o quê</em> — e, com um perfil, <em>deliberam</em>: papéis por conselheiro, evidência em bundle, candidatos destilados julgados às cegas e uma decisão estruturada em vez de uma síntese.</p>
 
   <dl class="facts">
-    <div class="fact"><dt>Módulos</dt><dd>10</dd></div>
-    <div class="fact"><dt>Linhas</dt><dd>2 508</dd></div>
-    <div class="fact"><dt>Dependências</dt><dd>1 (SDK anthropic)</dd></div>
-    <div class="fact"><dt>Conselheiros</dt><dd>4 + presidente</dd></div>
-    <div class="fact"><dt>Checagens</dt><dd>131 offline</dd></div>
+    <div class="fact"><dt>Módulos</dt><dd>11</dd></div>
+    <div class="fact"><dt>Linhas (council/)</dt><dd>3 349</dd></div>
+    <div class="fact"><dt>Checagens</dt><dd>313 offline</dd></div>
+    <div class="fact"><dt>Perfis</dt><dd>2 · continuation / grill</dd></div>
+    <div class="fact"><dt>Ferramentas MCP</dt><dd>3</dd></div>
   </dl>
 </header>
 
 <!-- ============ 1. PIPELINE ============ -->
 <section>
   <div class="col">
-    <span class="stage-tag">Estágio 1 → 2 → 3</span>
+    <span class="stage-tag">Estágio 1 → 2 → 3 · caminho do ask</span>
     <h2>O caminho de uma pergunta</h2>
-    <p>Uma execução atravessa três estágios e produz duas saídas: a resposta em <code>stdout</code> e um registro selado em <code>runs/</code>. Nada entre os estágios é opcional por acaso — cada seta abaixo é uma transformação que existe para tirar um viés específico do resultado.</p>
+    <p>Este é o caminho sem perfil — <code>council ask</code>, o modo original, byte a byte o mesmo desde o primeiro commit. Uma execução atravessa três estágios e produz duas saídas: a resposta em <code>stdout</code> e um registro selado em <code>runs/</code>. Nada entre os estágios é opcional por acaso — cada seta abaixo é uma transformação que existe para tirar um viés específico do resultado. O caminho com perfil, que reusa exatamente este estágio 2, vem na seção seguinte.</p>
   </div>
 
   <figure>
@@ -300,6 +300,142 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
   </figure>
 </section>
 
+<!-- ============ 1b. DELIBERACAO ============ -->
+<section>
+  <div class="col">
+    <span class="stage-tag">O mesmo motor, com perfil</span>
+    <h2>O caminho de uma deliberação</h2>
+    <p>Um perfil (<code>[profiles.&lt;nome&gt;]</code> no TOML) muda quatro coisas: conselheiros ganham <strong>papéis</strong> (mensagem de sistema), a rodada carrega um <strong>bundle de evidência</strong> (selado por sha256), o estágio 1 produz <strong>candidatos estruturados</strong> em vez de prosa — e o presidente pode <strong>decidir</strong> em vez de sintetizar. O estágio 2 é o mesmo das cegas: o que muda é o que se ranqueia.</p>
+  </div>
+
+  <figure>
+    <div class="figbox">
+      <svg viewBox="0 0 760 720" role="img" aria-label="Caminho da deliberação: pergunta mais bundle mais referências da cadeia entram com um perfil; quatro conselheiros com papéis respondem; respostas cegas viram candidatos destilados; avaliadores ranqueiam candidatos às cegas sem julgar os próprios; Borda agrega por id; o presidente sintetiza ou decide; a decisão estruturada volta ao registro encadeado por sha.">
+        <defs>
+          <marker id="ahd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+          <marker id="ahds" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" class="f-seal"/>
+          </marker>
+        </defs>
+        <g font-family="IBM Plex Sans, sans-serif" font-size="12.5">
+
+          <!-- entradas -->
+          <rect x="60" y="14" width="150" height="38" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="135" y="38" text-anchor="middle" font-weight="500">pergunta</text>
+          <rect x="260" y="14" width="200" height="38" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="360" y="32" text-anchor="middle" font-weight="500">bundle de evidência</text>
+          <text x="360" y="46" text-anchor="middle" font-size="9.5" opacity=".65" font-family="IBM Plex Mono, monospace">sha256 do conteúdo no registro</text>
+          <rect x="510" y="14" width="200" height="38" rx="2" fill="none" class="s-seal" stroke-width="1.4" stroke-dasharray="5 3"/>
+          <text x="610" y="32" text-anchor="middle" font-weight="500" class="f-seal">run_refs</text>
+          <text x="610" y="46" text-anchor="middle" font-size="9.5" class="f-seal" opacity=".85" font-family="IBM Plex Mono, monospace">sha256 da deliberação anterior</text>
+
+          <!-- perfil -->
+          <rect x="150" y="78" width="460" height="40" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+          <text x="380" y="95" text-anchor="middle" font-weight="600">perfil</text>
+          <text x="380" y="110" text-anchor="middle" font-size="10.5" opacity=".7">papeis · criteria · formato do estágio 1 · modo do presidente</text>
+          <line x1="135" y1="52" x2="220" y2="78" stroke="currentColor" stroke-width="1.2" marker-end="url(#ahd)"/>
+          <line x1="360" y1="52" x2="360" y2="78" stroke="currentColor" stroke-width="1.2" marker-end="url(#ahd)"/>
+          <line x1="610" y1="52" x2="540" y2="78" class="s-seal" stroke-width="1.2" stroke-dasharray="5 3" marker-end="url(#ahds)"/>
+
+          <!-- estagio 1 com papeis -->
+          <text x="14" y="156" font-family="IBM Plex Mono, monospace" font-size="10.5" opacity=".6">1</text>
+          <g stroke="currentColor" stroke-width="1.2" fill="none">
+            <line x1="380" y1="118" x2="80" y2="168" marker-end="url(#ahd)"/>
+            <line x1="380" y1="118" x2="280" y2="168" marker-end="url(#ahd)"/>
+            <line x1="380" y1="118" x2="480" y2="168" marker-end="url(#ahd)"/>
+            <line x1="380" y1="118" x2="680" y2="168" marker-end="url(#ahd)"/>
+          </g>
+          <g stroke="currentColor" stroke-width="1.4" fill="none">
+            <rect x="20" y="174" width="120" height="46" rx="2"/>
+            <rect x="220" y="174" width="120" height="46" rx="2"/>
+            <rect x="420" y="174" width="120" height="46" rx="2"/>
+            <rect x="620" y="174" width="120" height="46" rx="2"/>
+          </g>
+          <g text-anchor="middle" font-weight="500">
+            <text x="80" y="192">gpt</text><text x="280" y="192">claude</text>
+            <text x="480" y="192">deepseek</text><text x="680" y="192">glm</text>
+          </g>
+          <g text-anchor="middle" font-size="9.5" opacity=".7">
+            <text x="80" y="208">continuador</text><text x="280" y="208">auditor</text>
+            <text x="480" y="208">guardião de escopo</text><text x="680" y="208">sem papel — neutro</text>
+          </g>
+          <text x="380" y="240" text-anchor="middle" font-size="10.5" opacity=".65">papel = mensagem de sistema · perfil continuation; em grill, quatro lentes de interrogatório</text>
+
+          <!-- mascara + destilacao -->
+          <g stroke="currentColor" stroke-width="1.2" fill="none">
+            <line x1="80" y1="220" x2="80" y2="252"/><line x1="280" y1="220" x2="280" y2="252"/>
+            <line x1="480" y1="220" x2="480" y2="252"/><line x1="680" y1="220" x2="680" y2="252"/>
+            <line x1="80" y1="252" x2="680" y2="252"/>
+            <line x1="380" y1="252" x2="380" y2="272" class="s-seal" stroke-width="1.6" marker-end="url(#ahds)"/>
+          </g>
+          <rect x="130" y="276" width="500" height="52" rx="2" fill="none" class="s-seal" stroke-width="1.6"/>
+          <text x="380" y="296" text-anchor="middle" font-weight="600" class="f-seal">máscara de identidade → destilação em candidatos</text>
+          <text x="380" y="313" text-anchor="middle" font-size="10" class="f-seal" opacity=".85">proposal: 1 proposta por resposta · questions: cada questão é um candidato (id q&lt;n&gt;-&lt;i&gt;)</text>
+
+          <!-- estagio 2 sobre candidatos -->
+          <text x="14" y="356" font-family="IBM Plex Mono, monospace" font-size="10.5" opacity=".6">2</text>
+          <line x1="380" y1="328" x2="380" y2="352" stroke="currentColor" stroke-width="1.2" marker-end="url(#ahd)"/>
+          <rect x="180" y="356" width="400" height="56" rx="2" fill="none" class="s-blind" stroke-width="1.6"/>
+          <text x="380" y="377" text-anchor="middle" font-weight="600" class="f-blind">cédulas às cegas sobre candidatos</text>
+          <text x="380" y="394" text-anchor="middle" font-size="10" class="f-blind" opacity=".9">autores ≠ avaliadores: autor não julga os próprios · o resto do conselho julga</text>
+
+          <line x1="380" y1="412" x2="380" y2="436" stroke="currentColor" stroke-width="1.2" marker-end="url(#ahd)"/>
+          <rect x="230" y="440" width="300" height="46" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="380" y="459" text-anchor="middle" font-weight="600">Borda por id de candidato</text>
+          <text x="380" y="475" text-anchor="middle" font-size="10" opacity=".7">sem perfil, id = nome: o registro sai no shape de sempre</text>
+
+          <!-- fork do presidente -->
+          <line x1="380" y1="486" x2="380" y2="508" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="200" y1="508" x2="560" y2="508" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="200" y1="508" x2="200" y2="530" stroke="currentColor" stroke-width="1.2" marker-end="url(#ahd)"/>
+          <line x1="560" y1="508" x2="560" y2="530" class="s-seal" stroke-width="1.4" marker-end="url(#ahds)"/>
+
+          <text x="14" y="532" font-family="IBM Plex Mono, monospace" font-size="10.5" opacity=".6">3</text>
+          <rect x="100" y="534" width="200" height="56" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+          <text x="200" y="554" text-anchor="middle" font-weight="600">synthesizer</text>
+          <text x="200" y="571" text-anchor="middle" font-size="10" opacity=".7">síntese (grill: fronteira de questões)</text>
+
+          <rect x="460" y="534" width="200" height="56" rx="2" fill="none" class="s-seal" stroke-width="1.5"/>
+          <text x="560" y="551" text-anchor="middle" font-weight="600" class="f-seal">decider</text>
+          <text x="560" y="567" text-anchor="middle" font-size="9.5" class="f-seal" opacity=".9">vê "Candidato A/B/…" — cego até aqui</text>
+          <text x="560" y="580" text-anchor="middle" font-size="9.5" class="f-seal" opacity=".9">conselho dividido → instruído a ENCALHADO</text>
+
+          <!-- decisao -->
+          <line x1="560" y1="590" x2="560" y2="612" class="s-seal" stroke-width="1.4" marker-end="url(#ahds)"/>
+          <rect x="380" y="616" width="360" height="44" rx="2" fill="none" class="s-seal" stroke-width="1.4"/>
+          <text x="560" y="634" text-anchor="middle" font-weight="600" class="f-seal" font-family="IBM Plex Mono, monospace" font-size="11.5">DECISION: status | escolha | confiança | dissidências | fundamentos</text>
+          <text x="560" y="650" text-anchor="middle" font-size="9.5" class="f-seal" opacity=".85">escolha des-aliasada para o id real · ilegível = aviso nomeado, nunca invenção</text>
+
+          <line x1="200" y1="590" x2="200" y2="638" stroke="currentColor" stroke-width="1.2" marker-end="url(#ahd)"/>
+          <rect x="60" y="616" width="240" height="44" rx="2" fill="none" stroke="currentColor" stroke-width="1.4"/>
+          <text x="180" y="634" text-anchor="middle" font-weight="500">registro selado</text>
+          <text x="180" y="650" text-anchor="middle" font-size="9.5" opacity=".7" font-family="IBM Plex Mono, monospace">perfil · bundle_sha256 · run_refs · decisão</text>
+
+          <text x="380" y="692" text-anchor="middle" font-size="11" opacity=".7">o sha256 deste registro vira o --ref da próxima deliberação — a cadeia vive no chamador, o servidor não guarda estado</text>
+        </g>
+      </svg>
+    </div>
+    <figcaption><b>Três desacoplamentos carregam este desenho.</b> Autores, avaliadores e candidatos são conjuntos distintos — na prática do <code>continuation</code>: um auditor propõe, os outros três julgam, ninguém pontua o próprio texto. O decisor é cego até o último passo: elege "Candidato A", e a escolha é traduzida de volta ao id real antes de entrar no registro. E o ENCALHADO é instrução, não enforcement — o prompt manda declarar impasse quando o topo não tem folga; quem confere o resultado é o operador.</figcaption>
+  </figure>
+
+  <div class="split">
+    <div class="card">
+      <h4>continuation</h4>
+      <p>decider + proposal. Continuador, auditor e guardião de escopo propõem o próximo passo de um plano; o neutro contrapõe. Decide: <code>DECIDIDO</code> ou <code>ENCALHADO</code>, com dissidências nomeadas.</p>
+    </div>
+    <div class="card">
+      <h4>grill</h4>
+      <p>synthesizer + questions. Quatro lentes (cético, caçador de premissa, mapeador de dependências, adversário de escopo) produzem questões; cada questão vira candidato ranqueado por load-bearingness.</p>
+    </div>
+    <div class="card">
+      <h4>audit --bundle</h4>
+      <p>A auditoria de acréscimos ganha o bundle no corpus — com conferência de sha256: auditar com bundle de outra execução é recusado, não aceito em silêncio.</p>
+    </div>
+  </div>
+</section>
+
 <!-- ============ 2. CEGAMENTO ============ -->
 <section>
   <div class="col">
@@ -390,8 +526,8 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
 <section>
   <div class="col">
     <span class="stage-tag">Código</span>
-    <h2>Dez módulos, um só que amarra</h2>
-    <p>A dependência interna é um DAG raso e deliberado. Quatro módulos não importam nada de dentro do projeto (e um quinto importa só um) — são testáveis sem rede, sem config e sem mock. O <code>engine</code> é o único lugar onde tudo se encontra.</p>
+    <h2>Onze módulos, um só que amarra</h2>
+    <p>A dependência interna é um DAG raso e deliberado. Cinco módulos não importam nada de dentro do projeto — são testáveis sem rede, sem config e sem mock. O <code>engine</code> é o único lugar onde tudo se encontra; o <code>structured</code>, folha nova da Fase 1, parseia os blocos estruturados (QUESTIONS, PROPOSAL, DECISION) que os perfis pedem — tolerante a variação de formato, nunca inventando campo.</p>
   </div>
 
   <figure>
@@ -410,9 +546,9 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
             <rect x="440" y="36" width="180" height="44" rx="2"/>
           </g>
           <text x="230" y="56" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500">cli.py</text>
-          <text x="230" y="71" text-anchor="middle" font-size="10" opacity=".6">ask · doctor · models · show</text>
+          <text x="230" y="71" text-anchor="middle" font-size="10" opacity=".6">ask · deliberate · audit · ab · …</text>
           <text x="530" y="56" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500">mcp_server.py</text>
-          <text x="530" y="71" text-anchor="middle" font-size="10" opacity=".6">stdio JSON-RPC · 2 tools</text>
+          <text x="530" y="71" text-anchor="middle" font-size="10" opacity=".6">stdio JSON-RPC · 3 tools</text>
 
           <line x1="230" y1="80" x2="340" y2="122" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah2)"/>
           <line x1="530" y1="80" x2="420" y2="122" stroke="currentColor" stroke-width="1.2" marker-end="url(#ah2)"/>
@@ -424,57 +560,62 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
 
           <!-- engine -> folhas -->
           <g stroke="currentColor" stroke-width="1.2" fill="none">
-            <line x1="310" y1="180" x2="150" y2="246" marker-end="url(#ah2)"/>
-            <line x1="350" y1="180" x2="330" y2="246" marker-end="url(#ah2)"/>
-            <line x1="410" y1="180" x2="500" y2="246" marker-end="url(#ah2)"/>
-            <line x1="450" y1="180" x2="640" y2="246" marker-end="url(#ah2)"/>
+            <line x1="300" y1="180" x2="86" y2="246" marker-end="url(#ah2)"/>
+            <line x1="340" y1="180" x2="234" y2="246" marker-end="url(#ah2)"/>
+            <line x1="380" y1="180" x2="382" y2="246" marker-end="url(#ah2)"/>
+            <line x1="420" y1="180" x2="530" y2="246" marker-end="url(#ah2)"/>
+            <line x1="460" y1="180" x2="672" y2="246" marker-end="url(#ah2)"/>
           </g>
 
           <text x="20" y="272" font-family="IBM Plex Mono, monospace" font-size="10.5" letter-spacing="1" opacity=".6">FOLHAS</text>
           <g stroke="currentColor" stroke-width="1.4" fill="none">
-            <rect x="80" y="252" width="140" height="44" rx="2"/>
-            <rect x="264" y="252" width="140" height="44" rx="2"/>
-            <rect x="440" y="252" width="140" height="44" rx="2"/>
-            <rect x="600" y="252" width="140" height="44" rx="2"/>
+            <rect x="18" y="252" width="132" height="44" rx="2"/>
+            <rect x="166" y="252" width="132" height="44" rx="2"/>
+            <rect x="314" y="252" width="132" height="44" rx="2"/>
+            <rect x="462" y="252" width="132" height="44" rx="2"/>
+            <rect x="610" y="252" width="132" height="44" rx="2"/>
           </g>
-          <g text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500">
-            <text x="150" y="272">config.py</text>
-            <text x="334" y="272">prompts.py</text>
-            <text x="510" y="272">ranking.py</text>
-            <text x="670" y="272">providers.py</text>
+          <g text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500" font-size="12">
+            <text x="84" y="272">config.py</text>
+            <text x="232" y="272">prompts.py</text>
+            <text x="380" y="272">structured.py</text>
+            <text x="528" y="272">ranking.py</text>
+            <text x="676" y="272">providers.py</text>
           </g>
-          <g text-anchor="middle" font-size="10" opacity=".6">
-            <text x="150" y="288">TOML + .env</text>
-            <text x="334" y="288">os 2 prompts</text>
-            <text x="510" y="288">cegamento + Borda</text>
-            <text x="670" y="288">HTTP + SDK</text>
+          <g text-anchor="middle" font-size="9.5" opacity=".6">
+            <text x="84" y="288">TOML + perfis</text>
+            <text x="232" y="288">prompts + molduras</text>
+            <text x="380" y="288">blocos estruturados</text>
+            <text x="528" y="288">cegamento + Borda</text>
+            <text x="676" y="288">HTTP + SDK</text>
           </g>
 
           <!-- config -> providers -->
-          <path d="M 220 282 C 320 336, 560 336, 660 300" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ah2)"/>
-          <text x="440" y="340" text-anchor="middle" font-size="10.5" opacity=".7">config monta o Endpoint certo para cada provedor</text>
+          <path d="M 154 282 C 300 338, 560 338, 662 300" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ah2)"/>
+          <text x="400" y="338" text-anchor="middle" font-size="10.5" opacity=".7">config monta o Endpoint certo para cada provedor</text>
 
-          <text x="20" y="372" font-size="11" opacity=".7">prompts, ranking, providers e provenance não importam nada do projeto — testáveis isoladamente.</text>
+          <text x="20" y="372" font-size="11" opacity=".7">prompts, structured, ranking, providers e provenance não importam nada do projeto — testáveis isoladamente.</text>
         </g>
       </svg>
     </div>
-    <figcaption><b>A direção das setas é a razão de o teste offline existir sem mock de rede.</b> <code>ranking.py</code> concentra cegamento, parsing de cédula e Borda sem conhecer provedor, config ou HTTP — as 131 checagens exercitam a lógica que decide o resultado sem tocar em nenhuma API.</figcaption>
+    <figcaption><b>A direção das setas é a razão de o teste offline existir sem mock de rede.</b> <code>ranking.py</code> concentra cegamento, parsing de cédula e Borda sem conhecer provedor, config ou HTTP; <code>structured.py</code> parseia os blocos de deliberação sem conhecer nada além de <code>re</code> — as 313 checagens exercitam a lógica que decide o resultado sem tocar em nenhuma API.</figcaption>
   </figure>
 
   <div class="tbl-wrap">
     <table>
       <thead><tr><th class="mono">módulo</th><th>responsabilidade</th><th>linhas</th></tr></thead>
       <tbody>
+        <tr><td class="mono">cli.py</td><td>Oito comandos e a apresentação no terminal — <code>deliberate</code> com perfil, bundle, refs e decisão formatada.</td><td class="num">667</td></tr>
+        <tr><td class="mono">engine.py</td><td>Orquestra os estágios, destila candidatos, roteia decider/synthesizer, monta o registro, transforma falha em aviso nomeado.</td><td class="num">477</td></tr>
         <tr><td class="mono">providers.py</td><td>Fala com os provedores. Dois adaptadores, tipos de erro, contagem de tokens, detecção de truncamento.</td><td class="num">447</td></tr>
-        <tr><td class="mono">engine.py</td><td>Orquestra os três estágios, monta o registro, transforma falha em aviso nomeado.</td><td class="num">318</td></tr>
-        <tr><td class="mono">cli.py</td><td>Quatro comandos e a apresentação no terminal.</td><td class="num">249</td></tr>
+        <tr><td class="mono">mcp_server.py</td><td>Servidor MCP stdio escrito à mão, sem dependência — <code>ask</code>, <code>debate</code> e <code>deliberate</code>, stateless.</td><td class="num">338</td></tr>
+        <tr><td class="mono">config.py</td><td>Carrega TOML e <code>.env</code>, valida roster e perfis (papéis, criteria 1-7, modo, formato), monta endpoints.</td><td class="num">279</td></tr>
         <tr><td class="mono">ranking.py</td><td>Cegamento, parsing tolerante de cédula, Borda, detecção de conselho dividido.</td><td class="num">214</td></tr>
-        <tr><td class="mono">mcp_server.py</td><td>Servidor MCP stdio escrito à mão, sem dependência.</td><td class="num">215</td></tr>
-        <tr><td class="mono">config.py</td><td>Carrega TOML e <code>.env</code>, valida o roster, monta endpoints.</td><td class="num">175</td></tr>
-        <tr><td class="mono">prompts.py</td><td>Os dois prompts que você vai querer editar, isolados de propósito.</td><td class="num">96</td></tr>
-        <tr><td class="mono">provenance.py</td><td>Sela no registro o commit, o hash do fonte e o retrato da config que o produziram.</td><td class="num">127</td></tr>
+        <tr><td class="mono">prompts.py</td><td>Os prompts parametrizáveis que você vai querer editar, isolados de propósito — o default renderiza byte a byte o golden.</td><td class="num">213</td></tr>
+        <tr><td class="mono">audit.py</td><td>Procura na síntese os termos específicos que nenhuma resposta — nem o bundle — continha.</td><td class="num">207</td></tr>
         <tr><td class="mono">judgment.py</td><td>Julgamento cego do operador sobre um registro, e a taxa de concordância com o Borda.</td><td class="num">190</td></tr>
-        <tr><td class="mono">audit.py</td><td>Procura na síntese os termos específicos que nenhuma resposta continha.</td><td class="num">194</td></tr>
+        <tr><td class="mono">structured.py</td><td>Parseia QUESTIONS, PROPOSAL e DECISION: tolerante à variação real de formato, nunca inventa campo.</td><td class="num">178</td></tr>
+        <tr><td class="mono">provenance.py</td><td>Sela no registro o commit, o hash do fonte e o retrato da config — perfis incluídos — que o produziram.</td><td class="num">136</td></tr>
       </tbody>
     </table>
   </div>
@@ -587,11 +728,25 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
 
   <div class="col">
     <p>A coluna de <strong>dispersão</strong> é a que carrega informação que a média esconde: score 0.50 com dispersão 0.5 significa que os avaliadores não convergiram, e não que a resposta foi mediana. Quando o topo não tem folga — diferença menor que 0.15, ou dispersão alta — a execução emite <strong>conselho dividido</strong>, e a síntese passa a ser apresentada como uma opção, não como consenso.</p>
+    <p>Com perfil <code>decider</code>, sai uma segunda tabela — a decisão estruturada, também com a dispersão visível nas <strong>dissidências</strong>. Esta é real, da primeira deliberação paga:</p>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>campo</th><th>valor</th><th>nota</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">status</td><td class="mono">DECIDIDO</td><td>conselho dividido → instruído a declarar <code>ENCALHADO</code></td></tr>
+        <tr><td class="mono">escolha</td><td class="mono">claude</td><td>id real, des-aliasado de "Candidato A"</td></tr>
+        <tr><td class="mono">confiança</td><td class="mono">alta</td><td>consensus 1.00 no peer review cego</td></tr>
+        <tr><td class="mono">dissidências</td><td colspan="2">"C e D defendem iniciar a Fase 2 antes da validação ponta a ponta; B converge com A, mas sem critérios auditáveis suficientes"</td></tr>
+        <tr><td class="mono">fundamentos</td><td colspan="2">"consenso 1.00 e melhor conversão das incertezas atuais em evidência operacional"</td></tr>
+      </tbody>
+    </table>
   </div>
 
   <div class="note">
     <span class="lbl">Custódia</span>
-    <p>Cada execução grava <code>runs/&lt;data&gt;-&lt;sha12&gt;.json</code> com a pergunta, as respostas cruas, cada cédula com seu mapa de rótulos, a seed do embaralhamento, o <code>sha256</code> do próprio registro — e o <strong>selo do produtor</strong>: o commit do council, se a árvore estava suja, um hash de todo o fonte do pacote e outro da config resolvida. Os prompts não são guardados em texto: com o código endereçado por hash e as respostas gravadas, eles são reconstituíveis, e guardá-los inflaria o registro cerca de doze vezes. A seed fixa o embaralhamento dos rótulos, não a saída dos modelos — o registro é <em>inspecionável</em>, não reproduzível: rodar de novo com a mesma seed dá outras respostas. O que ele permite é auditar depois por que o conselho decidiu assim — e, com o selo, saber se o código que produziu aquele registro ainda é o que está na árvore. <code>council show</code> compara e avisa quando divergem.</p>
+    <p>Cada execução grava <code>runs/&lt;data&gt;-&lt;sha12&gt;.json</code> com a pergunta, as respostas cruas, cada cédula com seu mapa de rótulos, a seed do embaralhamento, o <code>sha256</code> do próprio registro — e o <strong>selo do produtor</strong>: o commit do council, se a árvore estava suja, um hash de todo o fonte do pacote e outro da config resolvida (perfis incluídos — trocar um critério no TOML muda o selo). Numa deliberação, o registro ganha mais quatro âncoras: <code>profile_name</code>, <code>bundle_sha256</code> (o texto do bundle não entra — o hash âncora, o arquivo é do chamador), <code>run_refs</code> (os shas das deliberações anteriores da cadeia) e a <code>decision</code> parseada. Os prompts não são guardados em texto: com o código endereçado por hash e as respostas gravadas, eles são reconstituíveis, e guardá-los inflaria o registro cerca de doze vezes. A seed fixa o embaralhamento dos rótulos, não a saída dos modelos — o registro é <em>inspecionável</em>, não reproduzível: rodar de novo com a mesma seed dá outras respostas. O que ele permite é auditar depois por que o conselho decidiu assim — e, com o selo, saber se o código que produziu aquele registro ainda é o que está na árvore. <code>council show</code> compara e avisa quando divergem.</p>
   </div>
 </section>
 
@@ -680,18 +835,19 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
     <span class="stage-tag">Limites declarados</span>
     <h2>O que este desenho não faz</h2>
     <ul>
+      <li><strong>Uma deliberação é uma rodada.</strong> Ninguém vê a objeção do par a tempo de revisar a própria posição — o que existe é peer review, não debate. Múltiplas rodadas intra-execução são a Fase 2, e só entram depois de um experimento pré-registrado provar que valem o custo.</li>
       <li><strong>O cegamento é bom, não perfeito.</strong> A máscara pega marcas conhecidas de autoria. Estilo de escrita, idioma preferido e formatação característica continuam identificando o autor para um avaliador atento.</li>
       <li><strong>Os quatro modelos não são independentes de verdade.</strong> Treinam sobre corpora sobrepostos. Concordância entre eles reduz o risco de erro idiossincrático, mas não corrige erro que a literatura inteira compartilha.</li>
-      <li><strong>A pergunta precisa ser autocontida.</strong> O conselho não vê seu repositório, seus arquivos nem a conversa em que a pergunta nasceu — o que é justamente o que o torna um produtor cego, e também o que limita o que ele consegue julgar.</li>
-      <li><strong>Perguntar publica.</strong> Cada execução envia o texto da pergunta a quatro provedores externos simultaneamente. Para conteúdo privado isso é uma decisão, não um detalhe de operação.</li>
-      <li><strong>Latência é estrutural.</strong> Três estágios sequenciais, com o estágio 2 esperando o estágio 1 inteiro. Uma pergunta densa leva de 90 segundos a 8 minutos; <code>--no-rank</code> corta o estágio 2 e aproximadamente metade do custo.</li>
+      <li><strong>O conselho vê só o que você entrega.</strong> O bundle leva a evidência que você escreve — o repo, os arquivos e a conversa continuam invisíveis. O que é justamente o que o torna produtor cego, e também o que limita o que ele consegue julgar.</li>
+      <li><strong>Perguntar publica.</strong> Cada execução envia a pergunta — e, em deliberação, o bundle — a quatro provedores externos simultaneamente. Para conteúdo privado isso é uma decisão, não um detalhe de operação.</li>
+      <li><strong>Latência é estrutural.</strong> Três estágios sequenciais, com o estágio 2 esperando o estágio 1 inteiro. Uma pergunta densa leva de 90 segundos a 8 minutos; <code>--no-rank</code> corta o estágio 2 e aproximadamente metade do custo. Deliberar custa ~2N+1 chamadas — as 2 GLM por questão valem para os perfis também.</li>
     </ul>
   </div>
 </section>
 
 <footer>
   <div class="col">
-    <p>Mapa gerado a partir do código em <code>~/llm-council</code>. Os números de consenso vêm de execuções reais registradas em <code>runs/</code>; as contagens de linha, dos módulos em <code>council/</code>.</p>
+    <p>Mapa gerado a partir do código em <code>~/llm-council</code>, atualizado ao fim da Fase 1 — Perfis de Deliberação. Os números de consenso e a decisão vêm de execuções reais registradas em <code>runs/</code>; as contagens de linha, dos módulos em <code>council/</code>.</p>
   </div>
 </footer>
 
