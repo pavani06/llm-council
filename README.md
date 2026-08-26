@@ -36,6 +36,26 @@ salva só a resposta.
 ./bin/council show                    # último registro salvo
 ```
 
+### Deliberação com perfil
+
+Além de perguntar, o conselho delibera: conselheiros com papéis, um bundle de
+evidência, candidatos avaliados às cegas e uma decisão estruturada. Perfis vivem em
+`[profiles.<nome>]` no `council.toml` — hoje `continuation` (decide o próximo passo
+de um plano após uma execução) e `grill` (produz questões ranqueadas por
+load-bearingness).
+
+```bash
+./bin/council deliberate "qual o proximo passo?" \
+    --profile continuation --bundle resumo-da-execucao.md --json
+./bin/council deliberate "teste deste plano" --profile grill --bundle plano.md
+./bin/council audit --bundle resumo-da-execucao.md   # conferência do bundle por sha256
+```
+
+`--ref <sha>` encadeia deliberações (a anterior entra no registro pelo sha256); o
+servidor MCP expõe `council_deliberate` com o mesmo contrato, sem estado — a cadeia
+vive no chamador. Custo: ~2N+1 chamadas por deliberação; as 2 GLM por questão valem
+para os perfis também.
+
 ### Auditoria da síntese
 
 O presidente devolve texto novo. Nada verificava que ele só afirma o que os membros sustentaram.
@@ -104,6 +124,14 @@ hash de todo o fonte do pacote e hash da config resolvida. `council show` compar
 qualquer edição em `prompts.py` ou no roster. Os prompts não são guardados em texto: são
 reconstituíveis a partir do código selado mais as respostas.
 
+**Deliberação** — um perfil dá papel a cada conselheiro, bundle de evidência à rodada e formato
+ao output: propostas ou questões viram candidatos destilados, ranqueados às cegas como sempre;
+o presidente pode decidir em vez de sintetizar (`DECIDIDO | escolha | confiança | dissidências |
+fundamentos`, com a decisão ilegível virando aviso nomeado, nunca invenção), e conselho dividido
+declara `ENCALHADO` em vez de forjar vitória. O bundle entra no registro como sha256; deliberações
+anteriores encadeiam por `run_refs`; no decisor cego os candidatos chegam ao presidente como
+`Candidato A/B/...` e a escolha volta traduzida para o id real.
+
 **Falhas** — provedor que cai vira aviso nomeado com o motivo, nunca um silêncio que parece consenso.
 Truncamento por `max_tokens` é detectado e nomeado: modelo de raciocínio (DeepSeek v4-pro, medido em
 4597 tokens de saída só para uma cédula) estoura teto baixo e a cédula some — sem essa instrumentação
@@ -111,7 +139,7 @@ isso se disfarça de "o modelo não seguiu o formato". Ajuste o teto por conselh
 
 ## Configuração
 
-Tudo em `council.toml`: provedores, roster, presidente e ajustes. Cada provedor declara `api`:
+Tudo em `council.toml`: provedores, roster, presidente, perfis de deliberação e ajustes. Cada provedor declara `api`:
 `openai` (default — vale para OpenAI, DeepSeek e z.ai, todos por stdlib) ou `anthropic`, que passa
 pelo SDK oficial. O SDK cuida de auth, versão de API, retries e tipos de erro; o adaptador cuida do
 que ele não tem como adivinhar: **`temperature` fica fora** (o Opus 5 devolve 400 se ela vier),
