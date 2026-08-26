@@ -1,5 +1,5 @@
 # Handoff — issue #11 (T10)
-PR #26 · branch issue/11-mcp-deliberate (código em 4237d377b36d) · 2026-08-26
+PR #26 · branch issue/11-mcp-deliberate (código em 765c194bda32) · 2026-08-26
 
 ## O que mudou no repo
 - `council/mcp_server.py`: ferramenta `council_deliberate` (schema question+profile required; bundle/run_refs/members opcionais), handler `tool_deliberate` + exceção `Ferramenta` (vira isError nomeado, nunca derruba o servidor). Resposta JSON: perfil, candidates (id/author sem texto cru), consensus resumido, decision, sintese, dividido, avisos, bundle_sha256, run_refs, tokens, sha256, registro.
