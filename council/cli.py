@@ -378,7 +378,11 @@ def cmd_audit(args) -> int:
         if not rec.get("bundle_sha256"):
             _err("nao auditavel: registro sem bundle_sha256 — esta execucao nao usou bundle")
             return 2
-        conteudo = Path(args.bundle).read_text(encoding="utf-8")
+        try:
+            conteudo = Path(args.bundle).read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as e:
+            _err(f"nao auditavel: --bundle ilegivel — {type(e).__name__}: {e}")
+            return 2
         sha = hashlib.sha256(conteudo.encode("utf-8")).hexdigest()
         if sha != rec["bundle_sha256"]:
             _err(

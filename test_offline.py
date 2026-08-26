@@ -1234,6 +1234,10 @@ stage1_format = "questions"
             rc, err = _audit_cli(args)
             check(rc == 2 and "sem bundle_sha256" in err,
                   f"flag em registro sem bundle recusa nomeada ({err.strip()[:60]})")
+            args = _Args22(); args.bundle = str(d22)  # diretorio, nao arquivo
+            rc, err = _audit_cli(args)
+            check(rc == 2 and "ilegivel" in err,
+                  f"--bundle apontando pra diretorio e erro nomeado, nao traceback ({err.strip()[:60]})")
         finally:
             cfgmod.load = orig_load22
 
