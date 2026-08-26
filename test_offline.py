@@ -1456,6 +1456,9 @@ stage1_format = "questions"
             r = _call24({"question": "q?", "profile": "cont", "run_refs": [""]})
             check(r["result"].get("isError") is True,
                   "run_refs com string vazia e recusado (startswith('') casaria tudo)")
+            r = _call24({"question": "q?", "profile": "cont", "run_refs": ""})
+            check(r["result"].get("isError") is True and "lista de prefixos" in r["result"]["content"][0]["text"],
+                  f"run_refs como string VAZIA e recusado ({r['result']['content'][0]['text'][:45]})")
             r = _call24({"question": "q?", "profile": "cont", "members": "fantasma"})
             check(r["result"].get("isError") is True and "fantasma" in r["result"]["content"][0]["text"],
                   f"members sem casamento e erro nomeado, nao silencio ({r['result']['content'][0]['text'][:50]})")

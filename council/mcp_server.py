@@ -207,8 +207,8 @@ def tool_deliberate(args: dict) -> str:
         cfg.members = picked
 
     refs: list[str] = []
-    if args.get("run_refs"):
-        crus = args["run_refs"]
+    if "run_refs" in args:
+        crus = args.get("run_refs") or []
         if not isinstance(crus, list) or not all(isinstance(x, str) and x.strip() for x in crus):
             raise Ferramenta("run_refs deve ser uma lista de prefixos de sha256 nao vazios")
         runs_dir = Path(cfg.settings.runs_dir)
