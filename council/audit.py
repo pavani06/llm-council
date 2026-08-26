@@ -123,8 +123,18 @@ class Auditoria:
         return not self.acrescimos and not self.erro
 
 
-def auditar(rec: dict[str, Any]) -> Auditoria:
-    """Varredura offline: o que a sintese afirma que nenhuma resposta continha."""
+def auditar(rec: dict[str, Any], bundle_text: str | None = None) -> Auditoria:
+    """Varredura offline: o que a sintese afirma que nenhuma resposta continha.
+
+    `bundle_text`: conteudo do bundle DA execucao (quem chama confere o hash contra
+    `bundle_sha256` do registro — aqui nao ha como verificar). Registro sem
+    `bundle_sha256` com bundle dado e erro nomeado: auditar com bundle que o run
+    nao usou seria grounding ficticio.
+    """
+    if bundle_text is not None and not rec.get("bundle_sha256"):
+        return Auditoria(erro="registro sem bundle_sha256 — esta execucao nao usou bundle",
+                         membros=[s["name"] for s in rec.get("stage1", []) if s.get("ok")])
+
     sintese = (rec.get("synthesis") or {}).get("content") or ""
     respostas = [s.get("content") or "" for s in rec.get("stage1", []) if s.get("ok")]
     membros = [s["name"] for s in rec.get("stage1", []) if s.get("ok")]
@@ -134,9 +144,12 @@ def auditar(rec: dict[str, Any]) -> Auditoria:
     if not respostas:
         return Auditoria(erro="registro sem respostas para comparar", membros=membros)
 
-    # Tudo que o conselho disse, normalizado, mais a propria pergunta: termo que
-    # veio do enunciado nao e acrescimo do presidente.
-    corpus = normalizar(" \n ".join(respostas) + " \n " + (rec.get("question") or ""))
+    # Tudo que o conselho disse, normalizado, mais a propria pergunta e o bundle:
+    # termo que veio do enunciado ou da evidencia nao e acrescimo do presidente.
+    corpus = normalizar(
+        " \n ".join(respostas) + " \n " + (rec.get("question") or "")
+        + (" \n " + bundle_text if bundle_text is not None else "")
+    )
 
     aud = Auditoria(membros=membros)
     todos = termos_especificos(sintese)

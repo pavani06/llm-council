@@ -361,6 +361,8 @@ def cmd_agreement(args) -> int:
 
 def cmd_audit(args) -> int:
     """O que a sintese afirma que nenhuma resposta continha."""
+    import hashlib
+
     from . import audit as ad
     from . import judgment as jd
 
@@ -371,11 +373,33 @@ def cmd_audit(args) -> int:
         _err(str(e))
         return 2
 
-    aud = ad.auditar(rec)
+    bundle_text = None
+    if args.bundle:
+        if not rec.get("bundle_sha256"):
+            _err("nao auditavel: registro sem bundle_sha256 — esta execucao nao usou bundle")
+            return 2
+        try:
+            conteudo = Path(args.bundle).read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as e:
+            _err(f"nao auditavel: --bundle ilegivel — {type(e).__name__}: {e}")
+            return 2
+        sha = hashlib.sha256(conteudo.encode("utf-8")).hexdigest()
+        if sha != rec["bundle_sha256"]:
+            _err(
+                "nao auditavel: bundle divergente — sha256 do arquivo nao bate com o "
+                f"registro (arquivo {sha[:12]}, registro {rec['bundle_sha256'][:12]})"
+            )
+            return 2
+        bundle_text = conteudo
+
+    aud = ad.auditar(rec, bundle_text=bundle_text)
     print(f"{BOLD}registro{RESET} {caminho.name}  ·  sha {rec.get('sha256','')[:12]}")
     if aud.erro:
         _err(f"nao auditavel: {aud.erro}")
         return 2
+    if rec.get("bundle_sha256") and not args.bundle:
+        _err(f"{DIM}aviso: registro tem bundle (sha {rec['bundle_sha256'][:12]}) que nao foi "
+             f"conferido — use --bundle CAMINHO para inclui-lo no corpus{RESET}")
 
     print(f"{DIM}{aud.frases_totais} frases na sintese · {aud.termos_sintese} termos conferiveis · "
           f"conselho: {', '.join(aud.membros)}{RESET}")
@@ -483,6 +507,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     au = sub.add_parser("audit", help="o que a sintese afirma que ninguem sustentou")
     au.add_argument("sha", nargs="?", help="prefixo do sha256; sem isso, o mais recente")
+    au.add_argument("--bundle", help="arquivo do bundle da execucao; sha256 e conferido contra o registro")
     au.add_argument("--verify", action="store_true",
                     help="confere os candidatos com um conselheiro que nao e o presidente (1 chamada)")
     au.set_defaults(func=cmd_audit)
