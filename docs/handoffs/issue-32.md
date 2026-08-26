@@ -1,5 +1,5 @@
 # Handoff — issue #32 (C3)
-PR #<n> · branch issue/32-decision-aliases (código em <sha12>) · 2026-08-26
+PR #38 · branch issue/32-decision-aliases (código em bd48bd810a4f) · 2026-08-26
 
 ## O que mudou no repo
 - `council/engine.py`: `Run.decision_aliases: dict[str, str]` (aditivo, default `{}`) e uma linha que o preenche logo após o laço que monta `alias_decisao`, **invertido** — a chave é o rótulo que aparece no texto do presidente (`"Candidato B"`) e o valor é o id real. Nada mais mudou no arquivo.
