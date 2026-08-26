@@ -356,6 +356,107 @@ def cmd_agreement(args) -> int:
     return 0
 
 
+# ------------------------------------------------------------ deliberate
+
+
+def cmd_deliberate(args) -> int:
+    """Deliberacao com perfil: bundle + papeis + decisao estruturada."""
+    from .engine import Deliberation
+
+    cfg = cfgmod.load(Path(args.config) if args.config else None)
+    if args.members:
+        wanted = {n.strip() for n in args.members.split(",")}
+        cfg.members = [m for m in cfg.members if m.name in wanted]
+        if not cfg.members:
+            _err(f"nenhum conselheiro casa com --members={args.members}")
+            return 2
+    if args.chairman:
+        match = [m for m in cfg.members if m.name == args.chairman]
+        if match:
+            cfg.chairman = match[0]
+        else:
+            _err(f"presidente '{args.chairman}' nao esta no conselho configurado")
+            return 2
+
+    perfil = cfg.profiles.get(args.profile)
+    if perfil is None:
+        disponiveis = ", ".join(sorted(cfg.profiles)) or "(nenhum definido no council.toml)"
+        _err(f"perfil '{args.profile}' nao existe. Disponiveis: {disponiveis}")
+        return 2
+
+    if args.bundle == "-":
+        bundle = sys.stdin.read()
+    elif args.bundle:
+        try:
+            bundle = Path(args.bundle).read_text(encoding="utf-8")
+        except (OSError, UnicodeError) as e:
+            _err(f"bundle ilegivel — {type(e).__name__}: {e}")
+            return 2
+    else:
+        bundle = None
+
+    runs_dir = Path(cfg.settings.runs_dir)
+    if not runs_dir.is_absolute():
+        runs_dir = cfg.source.parent / runs_dir
+    refs = []
+    if args.ref:
+        registros = sorted(runs_dir.glob("*.json"))
+        for prefixo in args.ref:
+            casa = []
+            for p in registros:
+                r = json.loads(p.read_text(encoding="utf-8"))
+                if prefixo in p.name or prefixo in (r.get("sha256") or ""):
+                    casa.append(r)
+            if not casa:
+                _err(f"--ref '{prefixo}' nao casa nenhum registro em {runs_dir}")
+                return 2
+            ultimo = max(casa, key=lambda r: r.get("started_at", ""))
+            refs.append(ultimo["sha256"])
+    question = args.question or sys.stdin.read().strip()
+    if not question:
+        _err("pergunta vazia")
+        return 2
+
+    council = Council(cfg, progress=None if args.quiet else _progress)
+    rec = council.run(Deliberation(question, profile=perfil, bundle=bundle, run_refs=refs))
+
+    if not runs_dir.exists():
+        runs_dir.mkdir(parents=True, exist_ok=True)
+    path = save_run(rec, runs_dir)
+
+    if args.json:
+        print(json.dumps(asdict(rec) | {"sha256": rec.digest()}, ensure_ascii=False, indent=2))
+        ok = rec.decision is not None if perfil.chairman_mode == "decider" else rec.synthesis.get("ok")
+        return 0 if ok else 1
+
+    if rec.decision:
+        d = rec.decision
+        print(f"[{d['status']}] {d['escolha']} — confiança {d['confianca']}")
+        if d["dissidencias"] and d["dissidencias"].lower() != "nenhuma":
+            print(f"dissidências: {d['dissidencias']}")
+        print(f"fundamentos: {d['fundamentos']}")
+    else:
+        print(rec.synthesis.get("content") or "(sem síntese)")
+
+    if not args.quiet:
+        _err("")
+        _err(f"{DIM}{rec.elapsed_s}s · {rec.usage.get('total_tokens', 0)} tokens · "
+             f"registro {path.name} · sha256 {rec.digest()[:12]}{RESET}")
+        for w in rec.warnings:
+            _err(f"{DIM}aviso: {w}{RESET}")
+        if bundle is not None:
+            try:
+                from . import audit as ad
+                aud = ad.auditar(asdict(rec), bundle_text=bundle)
+                if aud.acrescimos:
+                    _err(f"{DIM}o presidente usou termo que nenhuma resposta/bundle continha em "
+                         f"{len(aud.acrescimos)} trecho(s) — 'council audit {rec.digest()[:12]} "
+                         f"--bundle {args.bundle}' para ver{RESET}")
+            except Exception:
+                pass  # cortesia; nunca derruba a deliberacao
+    return 0 if (rec.decision or rec.synthesis.get("ok")) else 1
+
+
 # -------------------------------------------------------------------- audit
 
 
@@ -488,6 +589,17 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--json", action="store_true", help="registro completo em JSON no stdout")
     a.add_argument("--quiet", action="store_true", help="so a resposta final")
     a.set_defaults(func=cmd_ask)
+
+    dl = sub.add_parser("deliberate", help="deliberacao com perfil: bundle, papeis e decisao")
+    dl.add_argument("question", nargs="?", help="a pergunta (ou stdin)")
+    dl.add_argument("--profile", required=True, help="nome do perfil em [profiles] do council.toml")
+    dl.add_argument("--bundle", help="arquivo de evidencia da deliberacao, ou - para stdin")
+    dl.add_argument("--ref", action="append", help="prefixo de sha de deliberacao anterior (repetivel)")
+    dl.add_argument("--members", help="subconjunto por nome, separado por virgula")
+    dl.add_argument("--chairman", help="usa este conselheiro como presidente")
+    dl.add_argument("--json", action="store_true", help="registro completo em JSON no stdout")
+    dl.add_argument("--quiet", action="store_true", help="so a decisao/sintese final")
+    dl.set_defaults(func=cmd_deliberate)
 
     d = sub.add_parser("doctor", help="verifica config, chaves e coerencia do conselho")
     d.set_defaults(func=cmd_doctor)

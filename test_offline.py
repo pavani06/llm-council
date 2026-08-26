@@ -1241,6 +1241,108 @@ stage1_format = "questions"
         finally:
             cfgmod.load = orig_load22
 
+    print("23) cli deliberate")
+    import contextlib as _ctx23
+    import io as _io23
+    import tempfile as _t23
+    from council import cli as _cli23
+    from council.config import Profile as _Prof23
+
+    class _Args23:
+        question = "qual o proximo passo?"
+        profile = "cont"
+        bundle = None
+        ref = None
+        members = None
+        chairman = None
+        json = False
+        quiet = True
+        config = None
+
+    def chat_delib23(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            return fake_chat(self, model, messages, **kw)
+        if "precisa DECIDIR" in p:
+            return Reply(ok=True, content="analise\n\nDECISION:\nDECIDIDO | Candidato A | alta | nenhuma | segue", usage=Usage(9, 9))
+        if "preside um conselho" in p:
+            return Reply(ok=True, content="SINTESE", usage=Usage(9, 9))
+        return Reply(ok=True, content="Resposta do membro.", usage=Usage(5, 5))
+
+    with _t23.TemporaryDirectory() as td23:
+        d23 = Path(td23)
+        cfg23 = cfgmod.load(Path(__file__).parent / "council.toml")
+        cfg23.has_key = lambda p: True
+        cfg23.profiles = {"cont": _Prof23(name="cont", chairman_mode="decider",
+                                          stage1_format="proposal")}
+        cfg23.settings.runs_dir = str(d23 / "runs")
+        orig_load23, orig_chat23, orig_ant23 = cfgmod.load, Endpoint.chat, AnthropicEndpoint.chat
+        cfgmod.load = lambda p=None: cfg23
+        Endpoint.chat = chat_delib23
+        AnthropicEndpoint.chat = chat_delib23
+
+        def _delib(args) -> tuple[int, str]:
+            buf_out, buf_err = _io23.StringIO(), _io23.StringIO()
+            with _ctx23.redirect_stdout(buf_out), _ctx23.redirect_stderr(buf_err):
+                rc = _cli23.cmd_deliberate(args)
+            return rc, buf_out.getvalue(), buf_err.getvalue()
+
+        def _registro_de(question: str) -> dict:
+            for p in (d23 / "runs").glob("*.json"):
+                r = json.loads(p.read_text(encoding="utf-8"))
+                if r["question"] == question:
+                    return r
+            return {}
+
+        try:
+            rc, out, err = _delib(_Args23())
+            check(rc == 0 and out.startswith("[DECIDIDO]"), f"E2E decider exit 0 com decisao ({out[:40]!r})")
+            salvos = list((d23 / "runs").glob("*.json"))
+            check(len(salvos) == 1, f"registro salvo ({len(salvos)})")
+            reg23 = json.loads(salvos[0].read_text(encoding="utf-8"))
+            check(reg23["profile_name"] == "cont" and reg23["decision"]["status"] == "DECIDIDO",
+                  "registro com profile_name e decision parseada")
+
+            a = _Args23(); a.json = True; a.question = "de novo?"
+            rc, out, err = _delib(a)
+            j23 = json.loads(out)
+            check(rc == 0 and j23["decision"]["status"] == "DECIDIDO" and "sha256" in j23,
+                  "--json com decision e sha256")
+
+            a = _Args23(); a.profile = "inexistente"
+            rc, out, err = _delib(a)
+            check(rc == 2 and "cont" in err, f"perfil inexistente exit 2 com lista ({err.strip()[:50]})")
+
+            a = _Args23(); a.ref = ["zzzzzz"]
+            rc, out, err = _delib(a)
+            check(rc == 2 and "zzzzzz" in err, f"--ref sem casamento exit 2 nomeado ({err.strip()[:50]})")
+
+            a = _Args23(); a.ref = [reg23["sha256"][:8]]
+            rc, out, err = _delib(a)
+            j_ref = _registro_de("qual o proximo passo?")
+            check(rc == 0 and j_ref.get("run_refs") == [reg23["sha256"]],
+                  f"--ref por prefixo de sha encadeia o sha completo ({j_ref.get('run_refs')})")
+
+            a = _Args23(); a.bundle = "-"; a.question = "com stdin?"
+            import sys as _sys23
+            orig_stdin = _sys23.stdin
+            _sys23.stdin = _io23.StringIO("evidencia via stdin")
+            try:
+                rc, out, err = _delib(a)
+            finally:
+                _sys23.stdin = orig_stdin
+            j_b = _registro_de("com stdin?")
+            import hashlib as _h23
+            check(rc == 0 and j_b.get("bundle_sha256") == _h23.sha256(b"evidencia via stdin").hexdigest(),
+                  f"--bundle - le stdin e sela o sha ({j_b.get('bundle_sha256', '')[:12]})")
+
+            a = _Args23(); a.bundle = "/caminho/que/nao/existe"
+            rc, out, err = _delib(a)
+            check(rc == 2 and "ilegivel" in err, f"bundle ilegivel exit 2 nomeado ({err.strip()[:50]})")
+        finally:
+            cfgmod.load = orig_load23
+            Endpoint.chat, AnthropicEndpoint.chat = orig_chat23, orig_ant23
+
     print()
     print()
     if FALHAS:
