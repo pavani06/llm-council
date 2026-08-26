@@ -69,6 +69,45 @@ name     = "presidente"
 provider = "openai"
 model    = "gpt-5.6-sol"   # $4 in / $20 out
 
+# --- perfis de deliberacao ----------------------------------------------
+# O custo por pergunta vale para os perfis tambem: 2 chamadas GLM por questao
+# (resposta + avaliacao) saem da cota trimestral do coding plan.
+
+[profiles.continuation]
+# Proximo passo apos a execucao de uma issue/tarefa dentro de um plano.
+# Use: council deliberate "qual o proximo passo?" --profile continuation
+#        --bundle <resumo da execucao> [--ref <sha da deliberacao anterior>]
+chairman_mode = "decider"
+stage1_format = "proposal"
+criteria = [
+    "aderencia a trajetoria do plano",
+    "risco do passo e custo de reversao",
+    "dependencias que o passo bloqueia ou desbloqueia",
+    "sustentacao na evidencia do bundle",
+]
+# glm fica SEM papel de proposito: contraponto neutro.
+[profiles.continuation.roles]
+gpt      = "continuador: otimize o progresso da trajetoria do plano"
+claude   = "auditor: questione se a evidencia do bundle sustenta o que a execucao afirma"
+deepseek = "guardiao de escopo: questione se o passo proposto pertence ao plano"
+
+[profiles.grill]
+# Rodada de interrogatorio: questoes ranqueadas por load-bearingness.
+# Use: council deliberate "<plano em pauta>" --profile grill --bundle <contexto>
+chairman_mode = "synthesizer"
+stage1_format = "questions"
+criteria = [
+    "load-bearingness: quanto a resposta mudaria o plano",
+    "decidibilidade: e decisao do operador, nao fato buscavel",
+    "especificidade: nomeia o trade-off em jogo",
+    "urgencia: bloqueia a fronteira atual de decisoes",
+]
+[profiles.grill.roles]
+gpt      = "cetico metodologico: ataque a validade do metodo e da amostra"
+claude   = "cacador de premissa load-bearing: ache a premissa que, se cair, derruba o plano"
+deepseek = "mapeador de dependencias: ache decisoes travadas por decisoes ainda abertas"
+glm      = "adversario de escopo: questione o que nao pertence ao problema"
+
 # --- ajustes ------------------------------------------------------------
 
 [settings]
