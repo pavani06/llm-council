@@ -1176,6 +1176,47 @@ model = "gpt-5.6-sol"
           and not r21j.synthesis,
           f"zero candidatos + decider: falha nomeada, sem chamada ao presidente ({[w for w in r21j.warnings if 'impossivel' in w]})")
 
+    # (k) mapa de aliases persistido: o "Candidato B" do texto do presidente
+    # resolve para o id real lendo SO o registro
+    DEC_K = ("DECISION:\nDECIDIDO | Candidato A | alta | "
+             "Candidato B sustenta reparos adicionais de auditoria | segue o plano")
+    Endpoint.chat = chat_delib(DEC_K)
+    AnthropicEndpoint.chat = Endpoint.chat
+    try:
+        r21k = Council(cfg21).run(_Del3("qual o passo?", profile=prof_dec, bundle=BUNDLE21))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
+    nomes21k = {m["name"] for m in r21k.members}
+    check(len(r21k.decision_aliases) == len(r21k.candidates)
+          and set(r21k.decision_aliases.values()) == {c["id"] for c in r21k.candidates},
+          f"mapa completo: um rotulo por candidato ({r21k.decision_aliases})")
+    check(all(rot.startswith("Candidato ") for rot in r21k.decision_aliases),
+          f"a chave e o rotulo do texto do presidente, nao o id ({list(r21k.decision_aliases)})")
+    dissid21k = r21k.decision["dissidencias"]
+    citado21k = next(rot for rot in r21k.decision_aliases if rot in dissid21k)
+    check(r21k.decision_aliases[citado21k] in nomes21k,
+          f"'{citado21k}' citado na dissidencia resolve para conselheiro real "
+          f"({r21k.decision_aliases[citado21k]}) sem reconstruir a ordem do consenso")
+    check(r21k.decision["escolha"] in nomes21k
+          and not str(r21k.decision["escolha"]).startswith("Candidato"),
+          "e a escolha segue des-aliasada como antes (comportamento intocado)")
+
+    cfg_aberto21 = _copy21.copy(cfg21)
+    cfg_aberto21.settings = _copy21.copy(cfg21.settings)
+    cfg_aberto21.settings.blind_chairman = False
+    Endpoint.chat = chat_delib("DECISION:\nDECIDIDO | gpt | alta | nenhuma | x")
+    AnthropicEndpoint.chat = Endpoint.chat
+    try:
+        r21k2 = Council(cfg_aberto21).run(_Del3("q?", profile=prof_dec))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
+    check(r21k2.decision_aliases == {},
+          f"decider NAO cego: sem rotulo, sem mapa — os ids ja aparecem crus ({r21k2.decision_aliases})")
+    velho21k = {"question": "q", "decision": {"escolha": "glm",
+                                              "dissidencias": "Candidato B discorda"}}
+    check(velho21k.get("decision_aliases", {}) == {} and r21d.decision_aliases == {},
+          "registro anterior a C3 e caminho synthesizer: mapa neutro, leitura nao quebra")
+
     print("22) audit com bundle")
     import hashlib as _hl22
     from council import audit as _ad22
