@@ -6,7 +6,7 @@ PR #38 · branch issue/32-decision-aliases (código em bd48bd810a4f) · 2026-08-
 - `test_offline.py`: seção 21 estendida com o caso `(k)`, 6 checks. Suite 363 checks exit 0; golden (seção 15) byte a byte.
 
 ## Decisões tomadas em voo (fora do plano)
-- **A linha que des-aliasa a `escolha` ficou intocada** (`engine.py:513-514`), embora ela inverta o mesmo dict uma segunda vez e pudesse passar a ler `rec.decision_aliases`. O handoff da #8 registra que esse é o ponto onde o vazamento de identidade quase passou; uma dict-comprehension duplicada custa menos que mexer ali. Se alguém unificar depois, o caso (k) já cobre o comportamento.
+- **A linha que des-aliasa a `escolha` ficou intocada** (`engine.py:523-525`), embora ela inverta o mesmo dict uma segunda vez e pudesse passar a ler `rec.decision_aliases`. O handoff da #8 registra que esse é o ponto onde o vazamento de identidade quase passou; uma dict-comprehension duplicada custa menos que mexer ali. Se alguém unificar depois, o caso (k) já cobre o comportamento.
 - **`{}` com `blind_chairman=False` é resposta, não omissão**: sem cegamento os ids já vão crus para o presidente e não há alias a resolver. Provado no caso (k).
 - Verificação de "registro antigo lê neutro" ficou compacta (um `.get` sobre dict sem o campo, mais o caminho synthesizer): a leitura de registro legado pelos leitores reais — `council show`, `judgment.carregar`, `audit.auditar` — já é coberta pela seção 27, criada na #31.
 
