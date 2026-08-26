@@ -1741,6 +1741,7 @@ model = "gpt-5.6-sol"
     from council import judgment as _jd27
     from council import runs as _runs27
     from council.engine import Candidate as _Cand27
+    from council.engine import finalize_run as _fin27
 
     cfg27 = cfgmod.load(Path(__file__).parent / "council.toml")
     cfg27.has_key = lambda p: True
@@ -1847,6 +1848,38 @@ model = "gpt-5.6-sol"
               "campo novo ausente e lido como neutro")
         check(isinstance(_ad27.auditar(velho27).acrescimos, list),
               "auditoria do registro velho segue funcionando")
+
+    # (f) retorno antecipado tambem diz o custo: falha paga nao vira registro mudo
+    def chat_so_falha27(self, model, messages, **kw):
+        return Reply(ok=False, usage=Usage(900, 0), latency_s=1.0,
+                     error="conteudo vazio (finish_reason=length) — o modelo gastou o teto raciocinando")
+
+    Endpoint.chat = chat_so_falha27
+    AnthropicEndpoint.chat = chat_so_falha27
+    try:
+        with _t27.TemporaryDirectory() as td27c:
+            d27c = Path(td27c) / "runs"
+            mudo27 = Council(cfg27).run("e se todas falharem?", runs_dir=d27c)
+            gravado27 = json.loads(_fin27(mudo27, d27c).read_text(encoding="utf-8"))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e27, orig_a27
+    check(not [x for x in mudo27.stage1 if x.get("ok")] and mudo27.synthesis == {},
+          "fixture: nenhuma resposta valida, execucao sai pelo retorno antecipado")
+    check(mudo27.usage_by_stage["stage1"]["total_tokens"] == 4 * 900,
+          f"o que a falha custou aparece mesmo assim ({mudo27.usage_by_stage['stage1']})")
+    check(mudo27.usage == {},
+          f"e o 'usage' historico segue vazio nesse caminho, como sempre foi ({mudo27.usage})")
+    check(gravado27["usage_by_stage"]["total"]["total_tokens"] == 4 * 900,
+          "custo da falha sobrevive no registro gravado, nao so em memoria")
+
+    cfg_sem27 = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg_sem27.has_key = lambda p: False
+    sem27 = Council(cfg_sem27).run("e sem conselheiro nenhum?")
+    check(sem27.usage_by_stage["total"]["total_tokens"] == 0,
+          f"sem conselheiro: decomposicao zerada ({sem27.usage_by_stage['total']})")
+    CHAVES27 = {"stage1", "stage2", "synthesis", "total"}
+    check(all(set(r.usage_by_stage) == CHAVES27 for r in (rec27, mudo27, sem27)),
+          "todo registro pos-C2 carrega as quatro chaves — '{}' so pode ser registro anterior")
 
     # (e) o parcial de C1 carrega a decomposicao, senao mentiria por omissao
     with _t27.TemporaryDirectory() as td27b:

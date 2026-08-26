@@ -377,6 +377,7 @@ class Council:
             )
         if not members:
             rec.warnings.append("nenhum conselheiro com chave configurada")
+            rec.usage_by_stage = _usage_by_stage(rec)
             rec.elapsed_s = time.monotonic() - t0
             return rec
         rec.members = [{"name": m.name, "provider": m.provider, "model": m.model} for m in members]
@@ -410,6 +411,9 @@ class Council:
                             entry["masked_terms"] = hits
         if not answers:
             rec.warnings.append("nenhuma resposta no estagio 1; nada a sintetizar")
+            # resposta que falhou pode ter custado (o modelo gasta o teto raciocinando
+            # e devolve ok=False com usage) — o registro tem de dizer isso
+            rec.usage_by_stage = _usage_by_stage(rec)
             rec.elapsed_s = time.monotonic() - t0
             return rec
 
