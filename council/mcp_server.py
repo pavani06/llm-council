@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from . import config as cfgmod
-from .engine import Council, Deliberation, save_run
+from .engine import Council, Deliberation, finalize_run
+from .runs import final_runs, partial_path
 
 PROTOCOL = "2024-11-05"
 
@@ -113,6 +114,19 @@ def _log(msg: str) -> None:
     print(f"[council-mcp] {msg}", file=sys.stderr, flush=True)
 
 
+def _falha_de_registro(rec, runs_dir: Path, e: OSError) -> str:
+    """Erro nomeado que aponta para o artefato que sobreviveu.
+
+    O parcial do ultimo limite de estagio permanece: o aviso deixa de ser a
+    unica prova de que a execucao existiu.
+    """
+    msg = (f"registro final nao salvo ({type(e).__name__}: {e}); parcial preservado "
+           f"em {partial_path(runs_dir, rec.started_at).name}")
+    _log(msg)
+    rec.warnings.append(msg)
+    return msg
+
+
 def _run_council(question: str, members: str | None = None):
     cfg = cfgmod.load()
     if members:
@@ -120,15 +134,15 @@ def _run_council(question: str, members: str | None = None):
         picked = [m for m in cfg.members if m.name in wanted]
         if picked:
             cfg.members = picked
-    council = Council(cfg, progress=lambda s, m: _log(f"{s}: {m}"))
-    rec = council.run(question)
     runs_dir = Path(cfg.settings.runs_dir)
     if not runs_dir.is_absolute():
         runs_dir = cfg.source.parent / runs_dir
+    council = Council(cfg, progress=lambda s, m: _log(f"{s}: {m}"))
+    rec = council.run(question, runs_dir=runs_dir)
     try:
-        save_run(rec, runs_dir)
+        finalize_run(rec, runs_dir)
     except OSError as e:
-        rec.warnings.append(f"registro nao salvo: {e}")
+        _falha_de_registro(rec, runs_dir, e)
     return rec
 
 
@@ -214,7 +228,7 @@ def tool_deliberate(args: dict) -> str:
         runs_dir = Path(cfg.settings.runs_dir)
         if not runs_dir.is_absolute():
             runs_dir = cfg.source.parent / runs_dir
-        registros = sorted(runs_dir.glob("*.json")) if runs_dir.is_dir() else []
+        registros = final_runs(runs_dir)
         for prefixo in crus:
             casa = []
             for p in registros:
@@ -225,17 +239,17 @@ def tool_deliberate(args: dict) -> str:
                 raise Ferramenta(f"run_refs '{prefixo}' nao casa nenhum registro em {runs_dir}")
             refs.append(max(casa, key=lambda r: r.get("started_at", ""))["sha256"])
 
-    council = Council(cfg, progress=lambda s, m: _log(f"{s}: {m}"))
-    rec = council.run(Deliberation(question, profile=perfil,
-                                   bundle=args.get("bundle"), run_refs=refs))
     runs_dir = Path(cfg.settings.runs_dir)
     if not runs_dir.is_absolute():
         runs_dir = cfg.source.parent / runs_dir
+    council = Council(cfg, progress=lambda s, m: _log(f"{s}: {m}"))
+    rec = council.run(Deliberation(question, profile=perfil,
+                                   bundle=args.get("bundle"), run_refs=refs),
+                      runs_dir=runs_dir)
     try:
-        path = save_run(rec, runs_dir)
-        registro = path.name
+        registro = finalize_run(rec, runs_dir).name
     except OSError as e:
-        rec.warnings.append(f"registro nao salvo: {e}")
+        _falha_de_registro(rec, runs_dir, e)
         registro = ""
 
     out: dict[str, Any] = {

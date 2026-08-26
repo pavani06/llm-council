@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
+import signal
 import sys
 from dataclasses import asdict
 from pathlib import Path
 
 from . import config as cfgmod
-from .engine import Council, save_run
+from .engine import Council, Interruption, RunInterrupted, finalize_run
+from .runs import final_runs
 
 BOLD, DIM, RESET = "\033[1m", "\033[2m", "\033[0m"
 
@@ -21,6 +24,30 @@ def _err(msg: str) -> None:
 def _progress(stage: str, msg: str) -> None:
     tag = {"stage1": "1 respostas", "stage2": "2 avaliacao cega", "stage3": "3 sintese"}.get(stage, stage)
     _err(f"{DIM}[{tag}]{RESET} {msg}")
+
+
+def _handler_de_sinal(flag: Interruption):
+    """Fabrica o handler: ele so marca, nada de I/O dentro de handler de sinal.
+
+    Devolvido em vez de instalado direto para poder ser invocado no teste sem
+    sinal real.
+    """
+    def _marcar(signum, frame=None) -> None:
+        flag.request(f"sinal {signal.Signals(signum).name} recebido")
+    return _marcar
+
+
+@contextlib.contextmanager
+def _sinais_armados(flag: Interruption):
+    """SIGINT/SIGTERM marcam a interrupcao; o engine para no proximo limite de
+    estagio e grava o parcial. Os handlers anteriores voltam na saida."""
+    handler = _handler_de_sinal(flag)
+    anteriores = {s: signal.signal(s, handler) for s in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        yield
+    finally:
+        for s, anterior in anteriores.items():
+            signal.signal(s, anterior)
 
 
 # --------------------------------------------------------------------- ask
@@ -47,13 +74,20 @@ def cmd_ask(args) -> int:
         _err("pergunta vazia")
         return 2
 
-    council = Council(cfg, progress=None if args.quiet else _progress)
-    rec = council.run(question, skip_ranking=args.no_rank)
-
     runs_dir = Path(cfg.settings.runs_dir)
     if not runs_dir.is_absolute():
         runs_dir = cfg.source.parent / runs_dir
-    path = save_run(rec, runs_dir)
+
+    council = Council(cfg, progress=None if args.quiet else _progress)
+    interrupcao = Interruption()
+    try:
+        with _sinais_armados(interrupcao):
+            rec = council.run(question, skip_ranking=args.no_rank,
+                              runs_dir=runs_dir, interruption=interrupcao)
+    except RunInterrupted as e:
+        _err(f"interrompido: {e} (o que ja foi pago esta no parcial)")
+        return 130
+    path = finalize_run(rec, runs_dir)
 
     if args.json:
         print(json.dumps(asdict(rec) | {"sha256": rec.digest()}, ensure_ascii=False, indent=2))
@@ -204,7 +238,7 @@ def cmd_show(args) -> int:
     runs_dir = Path(cfg.settings.runs_dir)
     if not runs_dir.is_absolute():
         runs_dir = cfg.source.parent / runs_dir
-    files = sorted(runs_dir.glob("*.json"))
+    files = final_runs(runs_dir)
     if not files:
         print("nenhum registro em " + str(runs_dir))
         return 1
@@ -412,7 +446,7 @@ def cmd_deliberate(args) -> int:
         runs_dir = cfg.source.parent / runs_dir
     refs = []
     if args.ref:
-        registros = sorted(runs_dir.glob("*.json"))
+        registros = final_runs(runs_dir)
         for prefixo in args.ref:
             casa = []
             for p in registros:
@@ -430,11 +464,19 @@ def cmd_deliberate(args) -> int:
         return 2
 
     council = Council(cfg, progress=None if args.quiet else _progress)
-    rec = council.run(Deliberation(question, profile=perfil, bundle=bundle, run_refs=refs))
+    interrupcao = Interruption()
+    try:
+        with _sinais_armados(interrupcao):
+            rec = council.run(Deliberation(question, profile=perfil, bundle=bundle,
+                                           run_refs=refs),
+                              runs_dir=runs_dir, interruption=interrupcao)
+    except RunInterrupted as e:
+        _err(f"interrompido: {e} (o que ja foi pago esta no parcial)")
+        return 130
 
     if not runs_dir.exists():
         runs_dir.mkdir(parents=True, exist_ok=True)
-    path = save_run(rec, runs_dir)
+    path = finalize_run(rec, runs_dir)
 
     # predicado unico de sucesso: decider exige decisao parseada; synthesizer,
     # sintese ok — nos dois modos de saida (texto e --json).

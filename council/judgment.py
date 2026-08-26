@@ -8,7 +8,8 @@ sha256 do registro, e acumula a concordancia entre o operador e o Borda.
 O registro selado NAO e alterado — o veredito vive em arquivo proprio que
 aponta para o hash dele, do mesmo jeito que uma decisao aponta para o artefato.
 
-Modulo folha: nao importa nada do projeto alem de ranking (cegamento).
+Modulo folha: nao importa nada do projeto alem de ranking (cegamento) e runs
+(o que e parcial e o que e registro).
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from .ranking import identity_terms, scrub_identity
+from .runs import final_runs
 
 ESCOLHAS = ("1", "2", "empate", "nenhuma")
 
@@ -44,7 +46,7 @@ class _Membro:
 
 
 def carregar(runs_dir: Path, prefixo: str | None = None) -> tuple[Path, dict[str, Any]]:
-    arquivos = sorted(runs_dir.glob("*.json"))
+    arquivos = final_runs(runs_dir)
     if not arquivos:
         raise SemPar(f"nenhum registro em {runs_dir}")
     if prefixo:
