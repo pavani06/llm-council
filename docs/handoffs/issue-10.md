@@ -1,5 +1,5 @@
 # Handoff — issue #10 (T9)
-PR #25 · branch issue/10-cli-deliberate (código em f7dd08114e34) · 2026-08-26
+PR #25 · branch issue/10-cli-deliberate (código em b42e02c0b933) · 2026-08-26
 
 ## O que mudou no repo
 - `council/cli.py`: subcomando `deliberate` (QUESTION, --profile obrigatório, --bundle CAMINHO|- com erro nomeado, --ref prefixo repetível resolvendo sha256 completo do registro mais recente que casa, --members/--chairman/--json/--quiet). Saída: `[STATUS] escolha — confiança` + dissidências/fundamentos (decider) ou síntese; audit in-memory com bundle vira aviso dim pós-execução apontando o comando de auditoria.
