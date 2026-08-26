@@ -120,6 +120,9 @@ class Run:
     # custo por estagio (aditivo, {} = registro anterior a C2; 'usage' segue
     # com o significado historico dele, estagio 1 + presidente)
     usage_by_stage: dict[str, dict[str, int]] = field(default_factory=dict)
+    # rotulo cego -> id real (aditivo, {} sem decider cego): resolve o
+    # "Candidato B" do texto do presidente sem reconstruir a ordem do consenso
+    decision_aliases: dict[str, str] = field(default_factory=dict)
 
     def digest(self) -> str:
         blob = json.dumps(asdict(self), sort_keys=True, ensure_ascii=False).encode()
@@ -489,6 +492,7 @@ class Council:
                 ordenados += [c.id for c in candidates if c.id not in ordenados]
                 for i, cid in enumerate(ordenados):
                     alias_decisao[cid] = f"Candidato {chr(65 + i)}"
+                rec.decision_aliases = {v: k for k, v in alias_decisao.items()}
                 mostrados = {alias_decisao[c.id]: c.text for c in candidates}
                 cons_mostrado = [replace(c, member=alias_decisao.get(c.member, c.member))
                                  for c in consensus]
