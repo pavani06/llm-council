@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -16,6 +17,7 @@ from .config import Config, Member
 from .prompts import DEFAULT_CRITERIA, chairman_prompt, ranking_prompt, stage1_user_prompt
 from .provenance import seal
 from .providers import Reply
+from .runs import partial_path, stamp_for
 from .structured import parse_decision, parse_questions
 from .ranking import (
     Ballot,
@@ -110,10 +112,48 @@ class Run:
     run_refs: list[str] = field(default_factory=list)
     candidates: list[dict[str, Any]] = field(default_factory=list)
     decision: dict[str, Any] | None = None
+    # sobrevivencia (aditivo, defaults neutros: so parcial nasce marcado)
+    partial: bool = False
+    stage_reached: str = ""
+    interrupted: bool = False
+    interruption_reason: str | None = None
 
     def digest(self) -> str:
         blob = json.dumps(asdict(self), sort_keys=True, ensure_ascii=False).encode()
         return hashlib.sha256(blob).hexdigest()
+
+
+@dataclass
+class Interruption:
+    """Sinal recebido, lido no proximo limite de estagio.
+
+    Threads de chamada nao sao interrompiveis no meio: a granularidade honesta
+    e o limite de estagio. O handler so marca aqui; quem grava e decide parar e
+    o engine.
+    """
+
+    requested: bool = False
+    reason: str = ""
+
+    def request(self, reason: str) -> None:
+        self.requested = True
+        self.reason = reason
+
+
+class RunInterrupted(Exception):
+    """Execucao parada num limite de estagio por sinal.
+
+    O parcial ficou em disco com o que ja foi pago; o registro final NAO foi
+    gravado — execucao interrompida nao entra em denominador como se tivesse
+    terminado.
+    """
+
+    def __init__(self, rec: Run, path: Path, stage: str, reason: str):
+        super().__init__(f"{reason} — parou em '{stage}', parcial em {path.name}")
+        self.rec = rec
+        self.path = path
+        self.stage = stage
+        self.reason = reason
 
 
 class Council:
@@ -277,7 +317,22 @@ class Council:
 
     # ------------------------------------------------------------- run
 
-    def run(self, question: str | Deliberation, *, skip_ranking: bool = False) -> Run:
+    def _checkpoint(self, rec: Run, stage: str, runs_dir: Path | None,
+                    interruption: Interruption | None, t0: float) -> None:
+        """Limite de estagio: grava o parcial e, se um sinal chegou, para aqui."""
+        if runs_dir is None:
+            return
+        parando = interruption is not None and interruption.requested
+        if parando:
+            rec.interrupted = True
+            rec.interruption_reason = interruption.reason
+        path = write_partial(rec, runs_dir, stage, time.monotonic() - t0)
+        if parando:
+            raise RunInterrupted(rec, path, stage, interruption.reason)
+
+    def run(self, question: str | Deliberation, *, skip_ranking: bool = False,
+            runs_dir: Path | None = None,
+            interruption: Interruption | None = None) -> Run:
         spec = question if isinstance(question, Deliberation) else Deliberation(question)
         question = spec.question  # corpo existente segue lendo 'question'
         s = self.cfg.settings
@@ -306,6 +361,7 @@ class Council:
         rec.run_refs = list(spec.run_refs)
         if spec.bundle is not None:
             rec.bundle_sha256 = hashlib.sha256(spec.bundle.encode("utf-8")).hexdigest()
+        self._checkpoint(rec, "seal", runs_dir, interruption, t0)
 
         members = self.cfg.active_members()
         skipped = [m for m in self.cfg.members if m not in members]
@@ -333,6 +389,7 @@ class Council:
                 rec.warnings.append(
                     f"estagio 1: resposta de {a.name} truncada por max_tokens — aumente o teto dele em [params]"
                 )
+        self._checkpoint(rec, "stage1", runs_dir, interruption, t0)
 
         # Cegamento real: mascara autoidentificacao antes de qualquer julgamento.
         blind_answers = dict(answers)
@@ -395,6 +452,7 @@ class Council:
             rec.warnings.append(
                 f"estagio 2 pulado: com auto-exclusao sao necessarios 3+ candidatos (havia {len(candidates)})"
             )
+        self._checkpoint(rec, "stage2", runs_dir, interruption, t0)
 
         # estagio 3: synthesizer (padrao) ou decider (perfil), uma unica chamada
         mode = spec.profile.chairman_mode if spec.profile else "synthesizer"
@@ -448,6 +506,7 @@ class Council:
                 if alias_decisao:
                     dec["escolha"] = {v: k for k, v in alias_decisao.items()}[dec["escolha"]]
                 rec.decision = dec
+        self._checkpoint(rec, "synthesis", runs_dir, interruption, t0)
 
         rec.usage = _total_usage(rec)
         rec.elapsed_s = round(time.monotonic() - t0, 2)
@@ -464,10 +523,44 @@ def _total_usage(rec: Run) -> dict[str, int]:
     return tot
 
 
+def write_partial(rec: Run, runs_dir: Path, stage: str, elapsed_s: float) -> Path:
+    """Grava o que ja foi pago ate este limite de estagio.
+
+    O 'rec' vivo nao e mutado: vai a disco uma copia marcada, para que o
+    registro final nasca limpo (partial=false) e leia igual ao historico. O
+    parcial e reescrito a cada limite — nao e registro selado, e o rastro da
+    execucao em voo; o final, esse sim, nunca se reescreve.
+
+    A troca e atomica (grava em .tmp e renomeia): morte no meio da escrita
+    deixaria o parcial truncado, apagando junto o limite anterior — que e
+    justamente o que este mecanismo existe para salvar.
+    """
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    snap = replace(rec, partial=True, stage_reached=stage,
+                   usage=_total_usage(rec), elapsed_s=round(elapsed_s, 2))
+    path = partial_path(runs_dir, rec.started_at)
+    payload = asdict(snap) | {"sha256": snap.digest()}
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
+    return path
+
+
+def finalize_run(rec: Run, runs_dir: Path) -> Path:
+    """Grava o registro final e so entao apaga o parcial.
+
+    Nesta ordem: save_run que falha deixa o parcial em disco, que e tudo o que
+    sobrou do que foi pago.
+    """
+    path = save_run(rec, runs_dir)
+    partial_path(runs_dir, rec.started_at).unlink(missing_ok=True)
+    return path
+
+
 def save_run(rec: Run, runs_dir: Path) -> Path:
     runs_dir.mkdir(parents=True, exist_ok=True)
     digest = rec.digest()
-    stamp = rec.started_at.replace(":", "").replace("-", "")
+    stamp = stamp_for(rec.started_at)
     path = runs_dir / f"{stamp}-{digest[:12]}.json"
     # registro e imutavel: o mesmo sha ja gravado nao se reescreve (mtime prova)
     if path.is_file():

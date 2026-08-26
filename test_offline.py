@@ -1561,6 +1561,177 @@ model = "gpt-5.6-sol"
     finally:
         cfgmod.load = orig_load25
 
+    print("26) checkpoint: o registro sobrevive a morte do processo")
+    import contextlib as _ctx26
+    import io as _io26
+    import signal as _sig26
+    import tempfile as _t26
+    from council import cli as _cli26
+    from council import engine as _eng26
+    from council import judgment as _jd26
+    from council import mcp_server as _mcp26
+    from council import runs as _runs26
+    from council.config import Profile as _Prof26
+    from council.engine import Interruption as _Int26
+    from council.engine import RunInterrupted as _RI26
+    from council.engine import finalize_run as _fin26
+
+    cfg26 = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg26.has_key = lambda p: True
+    cfg26.settings.seed = 7
+
+    def _semear26(d: Path) -> tuple[Path, bytes]:
+        """Registro anterior ao mecanismo: nada aqui pode toca-lo."""
+        d.mkdir(parents=True, exist_ok=True)
+        pre = d / "20260101T000000+0000-aaaaaaaaaaaa.json"
+        pre.write_text('{"question": "registro anterior", "sha256": "' + "a" * 64 + '"}',
+                       encoding="utf-8")
+        return pre, pre.read_bytes()
+
+    # (a) sinal durante o estagio 1: para no limite seguinte, com o pago em disco
+    with _t26.TemporaryDirectory() as td26a:
+        d26a = Path(td26a) / "runs"
+        pre26a, bytes26a = _semear26(d26a)
+        flag26 = _Int26()
+
+        def chat_sinal26(self, model, messages, **kw):
+            if "FINAL RANKING" not in messages[0]["content"]:
+                flag26.request("sinal SIGTERM recebido")
+            return fake_chat(self, model, messages, **kw)
+
+        orig_e26a, orig_a26a = Endpoint.chat, AnthropicEndpoint.chat
+        Endpoint.chat = chat_sinal26
+        AnthropicEndpoint.chat = chat_sinal26
+        try:
+            Council(cfg26).run("pergunta interrompida?", runs_dir=d26a, interruption=flag26)
+            check(False, "execucao interrompida levanta RunInterrupted")
+        except _RI26 as e26:
+            parciais26a = sorted(d26a.glob("*" + _runs26.PARTIAL_SUFFIX))
+            check(len(parciais26a) == 1 and parciais26a[0] == e26.path,
+                  f"um parcial em disco, o mesmo da excecao ({[p.name for p in parciais26a]})")
+            p26 = json.loads(parciais26a[0].read_text(encoding="utf-8"))
+            check(p26["partial"] is True and p26["interrupted"] is True,
+                  "parcial nasce marcado (partial=true, interrupted=true)")
+            check(p26["stage_reached"] == "stage1",
+                  f"stage_reached e o limite alcancado (foi {p26['stage_reached']!r})")
+            check("SIGTERM" in (p26["interruption_reason"] or ""),
+                  f"motivo nomeado, nao silencio ({p26['interruption_reason']!r})")
+            check(len(p26["stage1"]) == n and p26["usage"]["total_tokens"] > 0,
+                  f"o que foi pago sobreviveu ({len(p26['stage1'])} respostas, "
+                  f"{p26['usage']['total_tokens']} tokens)")
+            check(not p26["synthesis"] and p26["sha256"],
+                  "parcial nao inventa estagio que nao rodou, e se endereca por sha")
+        finally:
+            Endpoint.chat, AnthropicEndpoint.chat = orig_e26a, orig_a26a
+        check(pre26a.read_bytes() == bytes26a, "registro pre-existente inalterado byte a byte")
+        check(_runs26.final_runs(d26a) == [pre26a], "final_runs exclui o parcial pelo nome")
+        check(all(not json.loads(p.read_text(encoding="utf-8")).get("partial")
+                  for p in _runs26.final_runs(d26a)),
+              "e o marcador partial=true exclui pelo conteudo")
+
+    # (b) execucao normal: parcial existe em voo, some no fim, final nasce limpo
+    with _t26.TemporaryDirectory() as td26b:
+        d26b = Path(td26b) / "runs"
+        pre26b, bytes26b = _semear26(d26b)
+        rec26 = Council(cfg26).run("pergunta normal?", runs_dir=d26b)
+        parcial26b = _runs26.partial_path(d26b, rec26.started_at)
+        check(parcial26b.is_file(), "parcial existe enquanto a execucao nao fechou")
+        final26b = _fin26(rec26, d26b)
+        check(not list(d26b.glob("*" + _runs26.PARTIAL_SUFFIX)),
+              "execucao normal nao deixa parcial no runs_dir")
+        check(not list(d26b.glob("*.tmp")),
+              "nem o temporario da troca atomica sobra em disco")
+        f26 = json.loads(final26b.read_text(encoding="utf-8"))
+        check(f26["partial"] is False and f26["interrupted"] is False
+              and f26["stage_reached"] == "" and f26["interruption_reason"] is None,
+              "final carrega os campos novos em default neutro (le igual ao historico)")
+        check(final26b != parcial26b and not final26b.name.endswith(_runs26.PARTIAL_SUFFIX),
+              f"parcial e final nunca no mesmo path ({final26b.name})")
+        check(pre26b.read_bytes() == bytes26b, "pre-existente intacto tambem apos execucao completa")
+        check(_fin26(rec26, d26b) == final26b and len(_runs26.final_runs(d26b)) == 2,
+              "finalizar de novo nao reescreve o final nem ressuscita parcial")
+
+    # (c) handler de sinal exercitado direto, sem sinal real
+    flag_h26 = _Int26()
+    _cli26._handler_de_sinal(flag_h26)(_sig26.SIGTERM, None)
+    check(flag_h26.requested and "SIGTERM" in flag_h26.reason,
+          f"handler marca a interrupcao sem sinal real ({flag_h26.reason!r})")
+    antes26 = _sig26.getsignal(_sig26.SIGINT)
+    with _cli26._sinais_armados(_Int26()):
+        check(_sig26.getsignal(_sig26.SIGINT) is not antes26, "handler armado durante a execucao")
+    check(_sig26.getsignal(_sig26.SIGINT) is antes26, "handler anterior restaurado na saida")
+
+    # (d) leitores: parcial orfao nunca passa por registro
+    with _t26.TemporaryDirectory() as td26c:
+        d26c = Path(td26c) / "runs"
+        d26c.mkdir(parents=True)
+        rec26c = Council(cfg26).run("pergunta do show?", runs_dir=d26c)
+        final26c = _fin26(rec26c, d26c)
+        orfao26 = d26c / ("29991231T235959+0000-1" + _runs26.PARTIAL_SUFFIX)
+        orfao26.write_text(
+            json.dumps(json.loads(final26c.read_text(encoding="utf-8")) | {"partial": True}),
+            encoding="utf-8")
+        cfg_show26 = cfgmod.load(Path(__file__).parent / "council.toml")
+        cfg_show26.has_key = lambda p: True
+        cfg_show26.settings.runs_dir = str(d26c)
+        orig_load26c = cfgmod.load
+        cfgmod.load = lambda p=None: cfg_show26
+        buf26 = _io26.StringIO()
+        try:
+            with _ctx26.redirect_stdout(buf26):
+                rc26 = _cli26.cmd_show(type("A26", (), {"config": None, "sha": None,
+                                                        "raw": False})())
+        finally:
+            cfgmod.load = orig_load26c
+        saida26 = buf26.getvalue()
+        check(rc26 == 0 and final26c.name in saida26 and orfao26.name not in saida26,
+              f"'council show' pula o parcial orfao e mostra o final ({saida26[:44]!r})")
+        check(_jd26.carregar(d26c)[0] == final26c,
+              "julgamento cego tambem nunca carrega parcial")
+
+    # (e) MCP: save final falho deixa o parcial e nomeia o erro (nao aviso orfao)
+    def chat_delib26(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            return fake_chat(self, model, messages, **kw)
+        if "precisa DECIDIR" in p:
+            return Reply(ok=True, content="DECISION:\nDECIDIDO | Candidato A | alta | nenhuma | segue",
+                         usage=Usage(9, 9))
+        return Reply(ok=True, content="Resposta do membro.", usage=Usage(5, 5))
+
+    with _t26.TemporaryDirectory() as td26d:
+        d26d = Path(td26d) / "runs"
+        cfg26d = cfgmod.load(Path(__file__).parent / "council.toml")
+        cfg26d.has_key = lambda p: True
+        cfg26d.profiles = {"cont": _Prof26(name="cont", chairman_mode="decider",
+                                           stage1_format="proposal")}
+        cfg26d.settings.runs_dir = str(d26d)
+
+        def _disco_cheio26(rec, runs_dir):
+            raise OSError("disco cheio")
+
+        orig_load26d, orig_save26 = cfgmod.load, _eng26.save_run
+        orig_e26d, orig_a26d = Endpoint.chat, AnthropicEndpoint.chat
+        cfgmod.load = lambda p=None: cfg26d
+        _eng26.save_run = _disco_cheio26
+        Endpoint.chat = chat_delib26
+        AnthropicEndpoint.chat = chat_delib26
+        try:
+            corpo26 = json.loads(_mcp26.tool_deliberate({"question": "e se o disco encher?",
+                                                         "profile": "cont"}))
+        finally:
+            cfgmod.load, _eng26.save_run = orig_load26d, orig_save26
+            Endpoint.chat, AnthropicEndpoint.chat = orig_e26d, orig_a26d
+        parciais26d = list(d26d.glob("*" + _runs26.PARTIAL_SUFFIX))
+        check(len(parciais26d) == 1, f"save final falho deixa o parcial ({len(parciais26d)})")
+        avisos26 = " | ".join(corpo26["avisos"])
+        check(corpo26["registro"] == "" and "disco cheio" in avisos26
+              and parciais26d and parciais26d[0].name in avisos26,
+              f"erro nomeado no retorno, apontando o artefato que sobreviveu ({avisos26[-72:]!r})")
+        check(json.loads(parciais26d[0].read_text(encoding="utf-8"))["decision"]["status"]
+              == "DECIDIDO",
+              "o parcial preservado carrega a deliberacao inteira, nao um toco")
+
     print()
     print()
     if FALHAS:
