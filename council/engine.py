@@ -117,6 +117,9 @@ class Run:
     stage_reached: str = ""
     interrupted: bool = False
     interruption_reason: str | None = None
+    # custo por estagio (aditivo, {} = registro anterior a C2; 'usage' segue
+    # com o significado historico dele, estagio 1 + presidente)
+    usage_by_stage: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def digest(self) -> str:
         blob = json.dumps(asdict(self), sort_keys=True, ensure_ascii=False).encode()
@@ -242,7 +245,8 @@ class Council:
             params=ranker.params,
         )
         ballot = Ballot(ranker=ranker.name, label_to_member=mapping, raw=reply.content,
-                        truncated=reply.truncated)
+                        truncated=reply.truncated, usage=reply.usage.as_dict(),
+                        latency_s=round(reply.latency_s, 2))
         if not reply.ok:
             ballot.ok = False
             ballot.error = reply.error
@@ -254,7 +258,9 @@ class Council:
         ballot.error = err
         ballot.ok = bool(order)
         shown = " > ".join(mapping[l] for l in order if l in mapping) or "?"
-        self.progress("stage2", f"{ranker.name}: {shown}" + (f"  [{err}]" if err else ""))
+        self.progress("stage2", f"{ranker.name}: {shown}"
+                      + f" ({reply.latency_s:.1f}s, {reply.usage.total} tok)"
+                      + (f"  [{err}]" if err else ""))
         return ballot
 
     def stage2(
@@ -432,6 +438,8 @@ class Council:
                     "order_members": b.ranked_members,
                     "verdicts": {k: list(v) for k, v in b.verdicts.items()},
                     "raw": b.raw,
+                    "usage": b.usage,
+                    "latency_s": b.latency_s,
                 }
                 for b in ballots
             ]
@@ -467,6 +475,7 @@ class Council:
                     "estagio 3: decisao impossivel — nenhum candidato destilado"
                 )
                 rec.usage = _total_usage(rec)
+                rec.usage_by_stage = _usage_by_stage(rec)
                 rec.elapsed_s = round(time.monotonic() - t0, 2)
                 return rec
             if s.blind_chairman:
@@ -509,18 +518,42 @@ class Council:
         self._checkpoint(rec, "synthesis", runs_dir, interruption, t0)
 
         rec.usage = _total_usage(rec)
+        rec.usage_by_stage = _usage_by_stage(rec)
         rec.elapsed_s = round(time.monotonic() - t0, 2)
         return rec
 
 
-def _total_usage(rec: Run) -> dict[str, int]:
+def _somar_usage(blocks: list[dict[str, Any]]) -> dict[str, int]:
     tot = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-    blocks = list(rec.stage1) + ([rec.synthesis] if rec.synthesis else [])
     for b in blocks:
         u = b.get("usage") or {}
         for k in tot:
             tot[k] += int(u.get(k) or 0)
     return tot
+
+
+def _total_usage(rec: Run) -> dict[str, int]:
+    """Conta historica do campo 'usage': estagio 1 + presidente, sem o estagio 2.
+
+    Nao se corrige — registro antigo tem de continuar significando o que
+    significava. A verdade completa vive no 'usage_by_stage'.
+    """
+    return _somar_usage(list(rec.stage1) + ([rec.synthesis] if rec.synthesis else []))
+
+
+def _usage_by_stage(rec: Run) -> dict[str, dict[str, int]]:
+    """Custo decomposto, com o estagio 2 que o 'usage' nunca somou.
+
+    'total' sai da MESMA funcao de soma dos tres estagios: a identidade
+    aritmetica e estrutural, nao coincidencia de duas contas escritas a mao.
+    """
+    sintese = [rec.synthesis] if rec.synthesis else []
+    return {
+        "stage1": _somar_usage(list(rec.stage1)),
+        "stage2": _somar_usage(list(rec.stage2)),
+        "synthesis": _somar_usage(sintese),
+        "total": _somar_usage(list(rec.stage1) + list(rec.stage2) + sintese),
+    }
 
 
 def write_partial(rec: Run, runs_dir: Path, stage: str, elapsed_s: float) -> Path:
@@ -537,7 +570,8 @@ def write_partial(rec: Run, runs_dir: Path, stage: str, elapsed_s: float) -> Pat
     """
     runs_dir.mkdir(parents=True, exist_ok=True)
     snap = replace(rec, partial=True, stage_reached=stage,
-                   usage=_total_usage(rec), elapsed_s=round(elapsed_s, 2))
+                   usage=_total_usage(rec), usage_by_stage=_usage_by_stage(rec),
+                   elapsed_s=round(elapsed_s, 2))
     path = partial_path(runs_dir, rec.started_at)
     payload = asdict(snap) | {"sha256": snap.digest()}
     tmp = path.with_suffix(".tmp")
