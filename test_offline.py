@@ -1322,6 +1322,11 @@ stage1_format = "questions"
             rc, out, err = _delib(a)
             check(rc == 2 and sha_meio in err,
                   f"--ref por substring do meio e recusado ({err.strip()[:40]})")
+            sha_fim = reg23["sha256"][-6:]  # sufixo do nome de arquivo: tambem nao
+            a = _Args23(); a.ref = [sha_fim]; a.question = "ref sufixo?"
+            rc, out, err = _delib(a)
+            check(rc == 2 and sha_fim in err,
+                  f"--ref por sufixo do sha e recusado (so startswith) ({err.strip()[:40]})")
 
             a = _Args23(); a.ref = ["zzzzzz"]
             rc, out, err = _delib(a)

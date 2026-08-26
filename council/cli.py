@@ -408,7 +408,7 @@ def cmd_deliberate(args) -> int:
             casa = []
             for p in registros:
                 r = json.loads(p.read_text(encoding="utf-8"))
-                if p.stem.endswith(prefixo) or (r.get("sha256") or "").startswith(prefixo):
+                if (r.get("sha256") or "").startswith(prefixo):
                     casa.append(r)
             if not casa:
                 _err(f"--ref '{prefixo}' nao casa nenhum registro em {runs_dir}")
