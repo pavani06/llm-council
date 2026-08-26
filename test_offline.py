@@ -1160,6 +1160,83 @@ stage1_format = "questions"
           and not r21j.synthesis,
           f"zero candidatos + decider: falha nomeada, sem chamada ao presidente ({[w for w in r21j.warnings if 'impossivel' in w]})")
 
+    print("22) audit com bundle")
+    import hashlib as _hl22
+    from council import audit as _ad22
+
+    base22 = {
+        "question": "Qual o passo?",
+        "stage1": [
+            {"name": "a", "ok": True, "content": "Seguir o plano original."},
+            {"name": "b", "ok": True, "content": "Consolidar antes de avancar."},
+        ],
+        "synthesis": {"content": "Seguir o plano original. Ativar o flag retry_on_stall."},
+    }
+    B22 = "evidencia: o plano menciona retry_on_stall e o gate de custo"
+    rec22 = dict(base22, bundle_sha256=_hl22.sha256(B22.encode()).hexdigest())
+
+    a_sem = _ad22.auditar(rec22)
+    check(any("retry_on_stall" in ac.termos for ac in a_sem.acrescimos),
+          f"sem bundle, termo so dele e sinalizado ({[ac.termos for ac in a_sem.acrescimos]})")
+    a_com = _ad22.auditar(rec22, bundle_text=B22)
+    check(a_com.acrescimos == [],
+          f"com bundle, termo da evidencia nao e acrescimo ({[ac.termos for ac in a_com.acrescimos]})")
+    check(_ad22.auditar(base22).acrescimos == a_sem.acrescimos,
+          "registro sem bundle: auditar igual (comportamento atual)")
+    err_sem_bundle = _ad22.auditar(base22, bundle_text="qualquer")
+    check(err_sem_bundle.erro and "sem bundle_sha256" in err_sem_bundle.erro,
+          f"bundle em registro que nao usou bundle e erro nomeado ({err_sem_bundle.erro})")
+
+    # CLI: flag --bundle confere hash; divergente recusa com exit 2
+    import contextlib
+    import io as _io22
+    import tempfile as _t22
+    from council import cli as _cli22
+
+    class _Args22:
+        sha = None
+        bundle = None
+        verify = False
+        config = None
+
+    with _t22.TemporaryDirectory() as td22:
+        d22 = Path(td22)
+        (d22 / "runs").mkdir()
+        (d22 / "runs" / "r.json").write_text(json.dumps(rec22), encoding="utf-8")
+        (d22 / "b_ok.txt").write_text(B22, encoding="utf-8")
+        (d22 / "b_ruim.txt").write_text("evidencia diferente", encoding="utf-8")
+        cfg22 = cfgmod.load(Path(__file__).parent / "council.toml")
+        cfg22.settings.runs_dir = str(d22 / "runs")
+        orig_load22 = cfgmod.load
+        cfgmod.load = lambda p=None: cfg22  # cmd_audit carrega config propria
+
+        def _audit_cli(args) -> tuple[int, str]:
+            buf = _io22.StringIO()
+            with contextlib.redirect_stderr(buf):
+                rc = _cli22.cmd_audit(args)
+            return rc, buf.getvalue()
+
+        try:
+            args = _Args22(); args.bundle = str(d22 / "b_ok.txt")
+            rc, err = _audit_cli(args)
+            check(rc == 0 and "nao foi conferido" not in err,
+                  f"--bundle com hash certo audita sem aviso de bundle (rc={rc}, {err.strip()[:50]})")
+            args = _Args22(); args.bundle = str(d22 / "b_ruim.txt")
+            rc, err = _audit_cli(args)
+            check(rc == 2 and "divergente" in err,
+                  f"hash divergente recusa com exit 2 ({err.strip()[:60]})")
+            args = _Args22()
+            rc, err = _audit_cli(args)
+            check(rc == 0 and "nao foi conferido" in err,
+                  f"sem flag, registro com bundle gera aviso dim ({err.strip()[:70]})")
+            (d22 / "runs" / "r2.json").write_text(json.dumps(base22), encoding="utf-8")
+            args = _Args22(); args.sha = "r2"; args.bundle = str(d22 / "b_ok.txt")
+            rc, err = _audit_cli(args)
+            check(rc == 2 and "sem bundle_sha256" in err,
+                  f"flag em registro sem bundle recusa nomeada ({err.strip()[:60]})")
+        finally:
+            cfgmod.load = orig_load22
+
     print()
     print()
     if FALHAS:
