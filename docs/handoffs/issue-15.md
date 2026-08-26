@@ -1,5 +1,5 @@
 # Handoff — issue #15 (T13)
-PR #<n> · branch issue/15-gate-final (código em PREENCHER) · 2026-08-26
+PR #<n> · branch issue/15-gate-final (código em 1d426da8ccdd) · 2026-08-26
 
 ## O que mudou no repo
 - `README.md`: seção "Deliberação com perfil" no Uso (comandos, perfis, custo), parágrafo "Deliberação" em "O que ele faz diferente", perfis mencionados na Configuração.
