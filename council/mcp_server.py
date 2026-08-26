@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from . import config as cfgmod
-from .engine import Council, save_run
+from .engine import Council, Deliberation, save_run
 
 PROTOCOL = "2024-11-05"
 
@@ -62,6 +62,48 @@ TOOLS: list[dict[str, Any]] = [
                 },
             },
             "required": ["question"],
+        },
+    },
+    {
+        "name": "council_deliberate",
+        "description": (
+            "Submete uma DELIBERACAO a um conselho com perfil: conselheiros podem ter "
+            "papeis, recebem um bundle de evidencia, produzem candidatos que sao "
+            "avaliados as cegas, e o presidente devolve uma decisao estruturada "
+            "(status DECIDIDO/ENCALHADO, escolha, confianca, dissidencias, fundamentos) "
+            "ou uma sintese, conforme o perfil. Use para decisao de continuidade de "
+            "plano (proximo passo apos uma execucao), gates antes de acoes de risco, ou "
+            "rodadas de interrogatorio (perfil grill). Nao use para perguntas triviais, "
+            "de baixa aposta ou sensiveis a latencia — para isso existe council_ask. O "
+            "servidor nao guarda estado: passe bundle e run_refs (shas de deliberacoes "
+            "anteriores) em toda chamada de continuidade."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "A pergunta da deliberacao, autocontida.",
+                },
+                "profile": {
+                    "type": "string",
+                    "description": "Nome do perfil em [profiles] do council.toml (ex.: continuation, grill).",
+                },
+                "bundle": {
+                    "type": "string",
+                    "description": "Opcional: evidencia da deliberacao (plano, resultado da execucao, contexto). O conteudo entra no registro como sha256.",
+                },
+                "run_refs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Opcional: prefixos de sha256 de deliberacoes anteriores desta cadeia.",
+                },
+                "members": {
+                    "type": "string",
+                    "description": "Opcional: nomes de conselheiros separados por virgula, para limitar o conselho.",
+                },
+            },
+            "required": ["question", "profile"],
         },
     },
 ]
@@ -142,7 +184,88 @@ def tool_debate(args: dict) -> str:
     return json.dumps(out, ensure_ascii=False, indent=2)
 
 
-HANDLERS = {"council_ask": tool_ask, "council_debate": tool_debate}
+def tool_deliberate(args: dict) -> str:
+    cfg = cfgmod.load()
+    nome = args.get("profile") or ""
+    perfil = cfg.profiles.get(nome)
+    if perfil is None:
+        disponiveis = ", ".join(sorted(cfg.profiles)) or "(nenhum definido no council.toml)"
+        raise Ferramenta(f"perfil '{nome}' nao existe. Disponiveis: {disponiveis}")
+
+    question = args.get("question") or ""
+    if not question.strip():
+        raise Ferramenta("pergunta vazia — a deliberacao precisa de uma pergunta")
+
+    if args.get("members"):
+        wanted = {n.strip() for n in args["members"].split(",")}
+        picked = [m for m in cfg.members if m.name in wanted]
+        if not picked:
+            raise Ferramenta(
+                f"members nao casa nenhum conselheiro (pedidos: {sorted(wanted)}; "
+                f"disponiveis: {sorted(m.name for m in cfg.members)})"
+            )
+        cfg.members = picked
+
+    refs: list[str] = []
+    if "run_refs" in args:
+        crus = args["run_refs"]
+        if not isinstance(crus, list) or not all(isinstance(x, str) and x.strip() for x in crus):
+            raise Ferramenta("run_refs deve ser uma lista de prefixos de sha256 nao vazios")
+        runs_dir = Path(cfg.settings.runs_dir)
+        if not runs_dir.is_absolute():
+            runs_dir = cfg.source.parent / runs_dir
+        registros = sorted(runs_dir.glob("*.json")) if runs_dir.is_dir() else []
+        for prefixo in crus:
+            casa = []
+            for p in registros:
+                r = json.loads(p.read_text(encoding="utf-8"))
+                if (r.get("sha256") or "").startswith(prefixo):
+                    casa.append(r)
+            if not casa:
+                raise Ferramenta(f"run_refs '{prefixo}' nao casa nenhum registro em {runs_dir}")
+            refs.append(max(casa, key=lambda r: r.get("started_at", ""))["sha256"])
+
+    council = Council(cfg, progress=lambda s, m: _log(f"{s}: {m}"))
+    rec = council.run(Deliberation(question, profile=perfil,
+                                   bundle=args.get("bundle"), run_refs=refs))
+    runs_dir = Path(cfg.settings.runs_dir)
+    if not runs_dir.is_absolute():
+        runs_dir = cfg.source.parent / runs_dir
+    try:
+        path = save_run(rec, runs_dir)
+        registro = path.name
+    except OSError as e:
+        rec.warnings.append(f"registro nao salvo: {e}")
+        registro = ""
+
+    out: dict[str, Any] = {
+        "pergunta": rec.question,
+        "perfil": rec.profile_name,
+        "conselheiros": [m["name"] for m in rec.members],
+        "candidates": [{"id": c["id"], "author": c["author"]} for c in rec.candidates],
+        "consensus": [
+            {"candidato": c["member"], "score": c["score"], "dispersao": c["spread"]}
+            for c in rec.consensus if c.get("ballots")
+        ],
+        "decision": rec.decision,
+        "sintese": rec.synthesis.get("content", ""),
+        "dividido": rec.divided,
+        "avisos": rec.warnings,
+        "bundle_sha256": rec.bundle_sha256,
+        "run_refs": rec.run_refs,
+        "tokens": rec.usage,
+        "sha256": rec.digest(),
+        "registro": registro,
+    }
+    return json.dumps(out, ensure_ascii=False, indent=2)
+
+
+class Ferramenta(Exception):
+    """Erro nomeado da ferramenta: vira conteudo isError, nao derruba o servidor."""
+
+
+HANDLERS = {"council_ask": tool_ask, "council_debate": tool_debate,
+            "council_deliberate": tool_deliberate}
 
 
 def handle(msg: dict) -> dict | None:
