@@ -1,5 +1,5 @@
 # Handoff — issue #12 (T11)
-PR #<n> · branch issue/12-perfis-reais (código em 4df0a0cd2783) · 2026-08-26
+PR #27 · branch issue/12-perfis-reais (código em 4df0a0cd2783) · 2026-08-26
 
 ## O que mudou no repo
 - `council.toml`: perfis reais `[profiles.continuation]` (decider/proposal; gpt=continuador, claude=auditor, deepseek=guardião de escopo, glm deliberadamente SEM papel; 4 criteria) e `[profiles.grill]` (synthesizer/questions; 4 lentes; 4 criteria) + comentário de custo GLM.
