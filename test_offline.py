@@ -1380,6 +1380,75 @@ stage1_format = "questions"
             cfgmod.load = orig_load23
             Endpoint.chat, AnthropicEndpoint.chat = orig_chat23, orig_ant23
 
+    print("24) mcp deliberate")
+    import tempfile as _t24
+    from council import config as _cfgmod24
+    from council import mcp_server as _mcp24
+    from council.config import Profile as _Prof24
+
+    def chat24(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            return fake_chat(self, model, messages, **kw)
+        if "precisa DECIDIR" in p:
+            return Reply(ok=True, content="DECISION:\nDECIDIDO | Candidato A | alta | nenhuma | segue", usage=Usage(9, 9))
+        return Reply(ok=True, content="Resposta do membro.", usage=Usage(5, 5))
+
+    with _t24.TemporaryDirectory() as td24:
+        d24 = Path(td24)
+        cfg24 = cfgmod.load(Path(__file__).parent / "council.toml")
+        cfg24.has_key = lambda p: True
+        cfg24.profiles = {"cont": _Prof24(name="cont", chairman_mode="decider",
+                                          stage1_format="proposal")}
+        cfg24.settings.runs_dir = str(d24 / "runs")
+        orig_load24 = _cfgmod24.load
+        _cfgmod24.load = lambda p=None: cfg24
+        orig_e24, orig_a24 = Endpoint.chat, AnthropicEndpoint.chat
+        Endpoint.chat = chat24
+        AnthropicEndpoint.chat = chat24
+        try:
+            def _call24(args: dict) -> dict:
+                msg = {"jsonrpc": "2.0", "id": 7, "method": "tools/call",
+                       "params": {"name": "council_deliberate", "arguments": args}}
+                return _mcp24.handle(msg)
+
+            r = _call24({"question": "qual o passo?", "profile": "cont",
+                         "bundle": "ctx do plano"})
+            corpo = json.loads(r["result"]["content"][0]["text"])
+            check(r["result"].get("isError") is not True
+                  and corpo["decision"]["status"] == "DECIDIDO",
+                  f"deliberate via MCP devolve decisao ({corpo.get('decision')})")
+            check(corpo["perfil"] == "cont" and corpo["bundle_sha256"]
+                  and corpo["registro"], "resposta traz perfil, bundle selado e registro")
+            check(all("id" in c and "author" in c for c in corpo["candidates"]),
+                  "candidates com id/author (sem texto cru — servidor leve)")
+
+            r = _call24({"question": "q?", "profile": "naoexiste"})
+            check(r["result"].get("isError") is True and "cont" in r["result"]["content"][0]["text"],
+                  f"perfil desconhecido: isError com lista ({r['result']['content'][0]['text'][:50]})")
+
+            r = _call24({"question": "q?", "profile": "cont", "run_refs": ["zzzz"]})
+            check(r["result"].get("isError") is True and "zzzz" in r["result"]["content"][0]["text"],
+                  f"ref sem casamento: isError nomeado ({r['result']['content'][0]['text'][:50]})")
+
+            sha_antes = corpo["sha256"]
+            r2 = _call24({"question": "outra?", "profile": "cont"})
+            corpo2 = json.loads(r2["result"]["content"][0]["text"])
+            check(corpo2["sha256"] != sha_antes and corpo2["run_refs"] == [],
+                  "segunda chamada nao ve estado da primeira (stateless)")
+
+            r = _mcp24.handle({"jsonrpc": "2.0", "id": 8, "method": "tools/list"})
+            ferramentas = r["result"]["tools"]
+            check([t["name"] for t in ferramentas] ==
+                  ["council_ask", "council_debate", "council_deliberate"],
+                  f"3 ferramentas no servidor ({[t['name'] for t in ferramentas]})")
+            ask_t = next(t for t in ferramentas if t["name"] == "council_ask")
+            check("required" in ask_t["inputSchema"] and "question" in ask_t["inputSchema"]["properties"],
+                  "schema do council_ask inalterado")
+        finally:
+            _cfgmod24.load = orig_load24
+            Endpoint.chat, AnthropicEndpoint.chat = orig_e24, orig_a24
+
     print()
     print()
     if FALHAS:
