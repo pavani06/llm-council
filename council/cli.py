@@ -136,6 +136,15 @@ def cmd_doctor(args) -> int:
     inside = any(m.provider == ch.provider and m.model == ch.model for m in cfg.members)
     print(f"  {'presidente':<14} {ch.provider}/{ch.model}")
     print()
+    print("perfis de deliberacao")
+    if cfg.profiles:
+        for nome in sorted(cfg.profiles):
+            p = cfg.profiles[nome]
+            papeis = f"{len(p.roles)} papeis" if p.roles else "sem papeis"
+            print(f"  {nome:<14} {p.chairman_mode}/{p.stage1_format} · {papeis}")
+    else:
+        print("  (nenhum perfil definido)")
+    print()
     n = len(active)
     if n == 0:
         print("BLOQUEADO: nenhum conselheiro com chave. Preencha o .env.")

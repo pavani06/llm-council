@@ -682,8 +682,24 @@ stage1_format = "questions"
         except ValueError as ex:
             check(msg in str(ex), f"erro nomeado: {msg} ({str(ex)[:60]})")
 
-    check(cfgmod.load(Path(__file__).parent / "council.toml").profiles == {},
-          "council.toml atual (sem perfis) carrega com profiles vazio")
+    # premissa original (council.toml real sem perfis) foi invalidada pela #12,
+    # que adiciona perfis reais; a intencao — config sem perfis carrega com
+    # profiles vazio — segue provada com fixture inline equivalente.
+    SEM_PERFIS = """
+[providers.openai]
+base_url = "https://x/v1"
+
+[[council]]
+name = "gpt"
+provider = "openai"
+model = "gpt-5.6-terra"
+
+[chairman]
+provider = "openai"
+model = "gpt-5.6-sol"
+"""
+    check(_cfg_de(SEM_PERFIS).profiles == {},
+          "config sem perfis carrega com profiles vazio")
 
     # regressoes de probes adversariais (review): tipo errado em roles/criteria
     # e containers malformados nunca viram crash nem aceitacao silenciosa
@@ -1470,6 +1486,80 @@ stage1_format = "questions"
         finally:
             _cfgmod24.load = orig_load24
             Endpoint.chat, AnthropicEndpoint.chat = orig_e24, orig_a24
+
+    print("25) perfis reais no council.toml")
+    from council.engine import Deliberation as _Del25
+
+    cfg25 = cfgmod.load(Path(__file__).parent / "council.toml")
+    check(set(cfg25.profiles) == {"continuation", "grill"},
+          f"os dois perfis carregam ({sorted(cfg25.profiles)})")
+    cont = cfg25.profiles["continuation"]
+    grill = cfg25.profiles["grill"]
+    check(cont.chairman_mode == "decider" and cont.stage1_format == "proposal",
+          "continuation: decider/proposal")
+    check(grill.chairman_mode == "synthesizer" and grill.stage1_format == "questions",
+          "grill: synthesizer/questions")
+    check(set(cont.roles) == {"gpt", "claude", "deepseek"} and "glm" not in cont.roles,
+          f"continuation: 3 papeis, glm de fora ({sorted(cont.roles)})")
+    check(len(grill.roles) == 4, f"grill: 4 lentes ({sorted(grill.roles)})")
+    check(len(cont.criteria) == 4 and len(grill.criteria) == 4, "4 criterios em cada")
+
+    def chat_cont25(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            return fake_chat(self, model, messages, **kw)
+        if "precisa DECIDIR" in p:
+            return Reply(ok=True, content="DECISION:\nDECIDIDO | Candidato A | media | nenhuma | ok", usage=Usage(9, 9))
+        return Reply(ok=True, content="PROPOSAL:\nTITULO: seguir plano\nCORPO:\nseguir", usage=Usage(5, 5))
+
+    def chat_grill25(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            return fake_chat(self, model, messages, **kw)
+        if "preside um conselho" in p:
+            return Reply(ok=True, content="SINTESE", usage=Usage(9, 9))
+        return Reply(ok=True, content="QUESTIONS:\n1 | q1? | r1\n2 | q2? | r2", usage=Usage(5, 5))
+
+    cfg25.has_key = lambda p: True
+    cfg25.settings.seed = 7
+    orig_e25, orig_a25 = Endpoint.chat, AnthropicEndpoint.chat
+    try:
+        Endpoint.chat = chat_cont25
+        AnthropicEndpoint.chat = chat_cont25
+        r_cont = Council(cfg25).run(_Del25("qual o passo?", profile=cont, bundle="ctx"))
+        check(r_cont.decision and r_cont.decision["status"] in ("DECIDIDO", "ENCALHADO"),
+              f"continuation E2E com decisao ({r_cont.decision and r_cont.decision['status']})")
+        check(r_cont.profile_name == "continuation" and len(r_cont.candidates) == 4,
+              "4 propostas como candidatos")
+
+        Endpoint.chat = chat_grill25
+        AnthropicEndpoint.chat = chat_grill25
+        r_grill = Council(cfg25).run(_Del25("teste do plano", profile=grill))
+        check(len(r_grill.candidates) == 8 and all(c["id"].startswith("q") for c in r_grill.candidates),
+              f"grill E2E: 8 questoes como candidatos ({len(r_grill.candidates)})")
+        check(r_grill.decision is None and r_grill.synthesis.get("ok"),
+              "grill: sintese, sem decisao")
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e25, orig_a25
+
+    import contextlib as _ctx25
+    import io as _io25
+    buf25 = _io25.StringIO()
+    cfg_doctor = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg_doctor.has_key = lambda p: True
+    orig_load25 = cfgmod.load
+    cfgmod.load = lambda p=None: cfg_doctor
+    try:
+        with _ctx25.redirect_stdout(buf25):
+            from council import cli as _cli25
+            _cli25.cmd_doctor(type("A25", (), {"config": None})())
+        saida = buf25.getvalue()
+        check("perfis de deliberacao" in saida and "continuation" in saida and "grill" in saida,
+              "doctor lista os perfis")
+        check("decider/proposal" in saida and "synthesizer/questions" in saida,
+              "doctor mostra modo/formato de cada perfil")
+    finally:
+        cfgmod.load = orig_load25
 
     print()
     print()
