@@ -1,5 +1,5 @@
 # Handoff — issue #30 (C1)
-PR #<n> · branch issue/30-checkpoint (código em <sha12>) · 2026-08-26
+PR #36 · branch issue/30-checkpoint (código em 934ccdbf761f) · 2026-08-26
 
 ## O que mudou no repo
 - `council/runs.py` (novo, folha, só stdlib): `PARTIAL_SUFFIX`, `stamp_for`, `partial_path`, `final_runs`. Dono único de "o que é parcial".
