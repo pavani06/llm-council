@@ -127,10 +127,12 @@ reconstituíveis a partir do código selado mais as respostas.
 **Deliberação** — um perfil dá papel a cada conselheiro, bundle de evidência à rodada e formato
 ao output: propostas ou questões viram candidatos destilados, ranqueados às cegas como sempre;
 o presidente pode decidir em vez de sintetizar (`DECIDIDO | escolha | confiança | dissidências |
-fundamentos`, com a decisão ilegível virando aviso nomeado, nunca invenção), e conselho dividido
-declara `ENCALHADO` em vez de forjar vitória. O bundle entra no registro como sha256; deliberações
-anteriores encadeiam por `run_refs`; no decisor cego os candidatos chegam ao presidente como
-`Candidato A/B/...` e a escolha volta traduzida para o id real.
+fundamentos`, com a decisão ilegível virando aviso nomeado, nunca invenção), e, com o conselho
+dividido, o decisor é instruído a declarar `ENCALHADO` em vez de forjar vitória — a instrução
+está no prompt; quem confere o resultado é você. O bundle entra no registro como sha256;
+deliberações anteriores encadeiam por `run_refs`; no decisor cego os candidatos chegam ao
+presidente como `Candidato A/B/...` e a escolha volta traduzida para o id real. O servidor MCP
+segue sem estado — a cadeia de rodadas vive no chamador.
 
 **Falhas** — provedor que cai vira aviso nomeado com o motivo, nunca um silêncio que parece consenso.
 Truncamento por `max_tokens` é detectado e nomeado: modelo de raciocínio (DeepSeek v4-pro, medido em
