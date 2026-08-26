@@ -997,6 +997,169 @@ stage1_format = "questions"
     finally:
         Endpoint.chat, AnthropicEndpoint.chat = orig_e2, orig_a2
 
+    print("21) registro de deliberacao")
+    import copy as _copy21
+    import hashlib as _hl21
+    from council.config import Profile as _Prof3
+    from council.engine import Deliberation as _Del3
+
+    cfg21 = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg21.has_key = lambda p: True
+    cfg21.settings.seed = 7
+
+    # (a) sem perfil: defaults neutros, nada de decisao
+    r21a = Council(cfg21).run("pergunta a?")
+    check(r21a.profile_name is None and r21a.bundle_sha256 is None
+          and r21a.run_refs == [] and r21a.decision is None,
+          "sem perfil: campos de deliberacao neutros")
+    respondentes21 = {x["name"] for x in r21a.stage1 if x.get("ok")}
+    check({c["id"] for c in r21a.candidates} == respondentes21
+          and all(c["id"] == c["author"] for c in r21a.candidates),
+          f"sem perfil: candidatos sao as respostas (ids=autores={sorted(respondentes21)})")
+
+    def chat_delib(decisao: str):
+        def _chat(self, model, messages, **kw):
+            p = messages[0]["content"]
+            if "FINAL RANKING" in p:
+                return fake_chat(self, model, messages, **kw)
+            if "precisa DECIDIR" in p:
+                return Reply(ok=True, content=f"analise\n\n{decisao}", usage=Usage(9, 9))
+            if "preside um conselho" in p:
+                return Reply(ok=True, content="SINTESE FINAL", usage=Usage(9, 9))
+            return Reply(ok=True, content="Resposta do membro sobre o passo.", usage=Usage(5, 5))
+        return _chat
+
+    prof_dec = _Prof3(name="cont", chairman_mode="decider", stage1_format="proposal")
+    BUNDLE21 = "evidencia curta do plano"
+
+    # (b) decider com DECISION valida: decisao parseada, escolha real, bundle selado
+    orig_e3, orig_a3 = Endpoint.chat, AnthropicEndpoint.chat
+    Endpoint.chat = chat_delib("DECISION:\nDECIDIDO | Candidato A | alta | nenhuma | segue o plano")
+    AnthropicEndpoint.chat = Endpoint.chat
+    try:
+        r21b = Council(cfg21).run(_Del3("qual o passo?", profile=prof_dec, bundle=BUNDLE21,
+                                        run_refs=["abc123"]))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
+    check(r21b.profile_name == "cont" and r21b.run_refs == ["abc123"],
+          "perfil e run_refs no registro")
+    check(r21b.bundle_sha256 == _hl21.sha256(BUNDLE21.encode()).hexdigest(),
+          "bundle_sha256 = sha256 do conteudo (conferido a mao)")
+    nomes21 = {m["name"] for m in r21b.members}
+    check(r21b.decision and r21b.decision["status"] == "DECIDIDO"
+          and r21b.decision["escolha"] in nomes21,
+          f"decisao parseada com escolha REAL ({r21b.decision and r21b.decision['escolha']})")
+    check(r21b.decision and not str(r21b.decision["escolha"]).startswith("Candidato"),
+          "escolha des-aliased (rotulo cego nao vaza para o registro)")
+    check(len(r21b.candidates) == 4 and all("author" in c for c in r21b.candidates),
+          f"4 candidatos com autor ({len(r21b.candidates)})")
+
+    # (c) DECISION malformada: decisao None + aviso nomeado
+    Endpoint.chat = chat_delib("DECISION:\nacho que sim")
+    AnthropicEndpoint.chat = Endpoint.chat
+    try:
+        r21c = Council(cfg21).run(_Del3("qual o passo?", profile=prof_dec))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
+    check(r21c.decision is None and any("ilegivel" in w for w in r21c.warnings),
+          f"decisao ilegivel vira aviso nomeado ({[w for w in r21c.warnings if 'ilegivel' in w]})")
+
+    # (d) synthesizer com perfil: decisao None, sintese normal
+    prof_syn = _Prof3(name="grillzinho", chairman_mode="synthesizer", stage1_format="questions")
+    Endpoint.chat = chat_delib("DECISION:\nDECIDIDO | Candidato A | alta | nenhuma | x")
+    AnthropicEndpoint.chat = Endpoint.chat
+    try:
+        r21d = Council(cfg21).run(_Del3("questoes?", profile=prof_syn))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
+    check(r21d.decision is None and r21d.synthesis.get("ok"),
+          "synthesizer ignora decider: decisao None, sintese normal")
+
+    # (e) divided + decider: o PROMPT recebe a diretiva de impasse e a resposta
+    # ENCALHADO parseia como decisao valida
+    PROMPT_E = []
+
+    def chat_e(self, model, messages, **kw):
+        PROMPT_E.append(messages[0]["content"])
+        return Reply(ok=True, content="DECISION:\nENCALHADO | Candidato A | baixa | glm | impasse real",
+                     usage=Usage(9, 9))
+
+    Endpoint.chat = chat_e
+    AnthropicEndpoint.chat = chat_e
+    try:
+        cons_e = [_Cons(member="x", score=0.5, positions=[1, 2], ballots=2, spread=0.5)]
+        reply_e = Council(cfg21).stage3("q?", {"Candidato A": "t1", "Candidato B": "t2"}, cons_e,
+                                        blind=True, mode="decider", divided=True)
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
+    check(reply_e.ok and "ESTA DIVIDIDO" in PROMPT_E[0] and "ENCALHADO" in PROMPT_E[0],
+          "divided=True: prompt do decider exige ENCALHADO com sintese do impasse")
+    dec_e, err_e = _pd(reply_e.content, ["Candidato A", "Candidato B"])
+    check(dec_e and dec_e["status"] == "ENCALHADO", f"resposta ENCALHADO parseia ({err_e})")
+
+    # (f) selo: perfis entram no config_snapshot e mudam o config_sha256
+    cfg_s = _copy21.copy(cfg21)
+    cfg_s.profiles = {}
+    cfg21.profiles = {"cont": prof_dec}
+    from council import provenance as _pv21
+    snap21 = _pv21.config_snapshot(cfg21)
+    check(snap21["profiles"]["cont"]["chairman_mode"] == "decider"
+          and snap21["profiles"]["cont"]["criteria"] is None,
+          "snapshot carrega perfis (criteria None serializa como null)")
+    check(_pv21.config_digest(cfg21) != _pv21.config_digest(cfg_s),
+          "mudar perfis muda o config_sha256")
+    cfg21.profiles = {}
+
+    # (g) mesma execucao, mesmo arquivo: nem cria segundo arquivo NEM reescreve
+    with _tmpdir.TemporaryDirectory() as td21:
+        dir21 = Path(td21) / "runs"
+        p1 = save_run(r21a, dir21)
+        mtime1 = p1.stat().st_mtime_ns
+        p2 = save_run(r21a, dir21)
+        check(p1 == p2 and len(list(dir21.glob("*.json"))) == 1
+              and p2.stat().st_mtime_ns == mtime1,
+              "segundo save do mesmo registro nao reescreve (mtime identico)")
+
+    # (h) falha sem membros NAO apaga a origem: campos da spec preenchidos
+    cfg_sem = _copy21.copy(cfg21)
+    cfg_sem.has_key = lambda p: False
+    r21h = Council(cfg_sem).run(_Del3("q?", profile=prof_dec, bundle="ctx",
+                                      run_refs=["ref1"]))
+    check(r21h.profile_name == "cont" and r21h.run_refs == ["ref1"]
+          and r21h.bundle_sha256 == _hl21.sha256(b"ctx").hexdigest(),
+          "retorno antecipado (sem conselheiros) mantem profile/refs/bundle no registro")
+
+    # (i) bundle vazio: sha do conteudo vazio (ausente = None, vazio = hash)
+    Endpoint.chat = chat_delib("DECISION:\nDECIDIDO | Candidato A | alta | nenhuma | x")
+    AnthropicEndpoint.chat = Endpoint.chat
+    try:
+        r21i = Council(cfg21).run(_Del3("q?", profile=prof_dec, bundle=""))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
+    check(r21i.bundle_sha256 == _hl21.sha256(b"").hexdigest(),
+          f"bundle vazio = sha256 do vazio ({r21i.bundle_sha256[:12]}…)")
+    r21i2 = Council(cfg21).run(_Del3("q?", profile=prof_dec))
+    check(r21i2.bundle_sha256 is None, "bundle ausente = None")
+
+    # (j) decider sem candidatos destilados: warning nomeado, sem crash
+    def chat_sem_bloco(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            return fake_chat(self, model, messages, **kw)
+        return Reply(ok=True, content="prosa sem bloco nenhum", usage=Usage(5, 5))
+
+    Endpoint.chat = chat_sem_bloco
+    AnthropicEndpoint.chat = chat_sem_bloco
+    try:
+        r21j = Council(cfg21).run(_Del3("q?", profile=_Prof3(name="g0", chairman_mode="decider",
+                                                             stage1_format="questions")))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
+    check(r21j.decision is None
+          and any("decisao impossivel" in w for w in r21j.warnings)
+          and not r21j.synthesis,
+          f"zero candidatos + decider: falha nomeada, sem chamada ao presidente ({[w for w in r21j.warnings if 'impossivel' in w]})")
+
     print()
     print()
     if FALHAS:
