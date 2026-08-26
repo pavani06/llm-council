@@ -1313,15 +1313,47 @@ stage1_format = "questions"
             rc, out, err = _delib(a)
             check(rc == 2 and "cont" in err, f"perfil inexistente exit 2 com lista ({err.strip()[:50]})")
 
+            a = _Args23(); a.profile = None
+            rc, out, err = _delib(a)
+            check(rc == 2 and "ask" in err, f"--profile ausente exit 2 nomeado ({err.strip()[:50]})")
+
+            sha_meio = reg23["sha256"][3:8]  # substring do MEIO: nao pode casar
+            a = _Args23(); a.ref = [sha_meio]; a.question = "ref substring?"
+            rc, out, err = _delib(a)
+            check(rc == 2 and sha_meio in err,
+                  f"--ref por substring do meio e recusado ({err.strip()[:40]})")
+
             a = _Args23(); a.ref = ["zzzzzz"]
             rc, out, err = _delib(a)
             check(rc == 2 and "zzzzzz" in err, f"--ref sem casamento exit 2 nomeado ({err.strip()[:50]})")
 
-            a = _Args23(); a.ref = [reg23["sha256"][:8]]
+            a = _Args23(); a.ref = [reg23["sha256"][:8]]; a.question = "encadeando?"
             rc, out, err = _delib(a)
-            j_ref = _registro_de("qual o proximo passo?")
+            j_ref = _registro_de("encadeando?")
             check(rc == 0 and j_ref.get("run_refs") == [reg23["sha256"]],
                   f"--ref por prefixo de sha encadeia o sha completo ({j_ref.get('run_refs')})")
+
+            # decider com decisao ilegivel: exit 1 nos DOIS modos (predicado unico)
+            def chat_ruim(self, model, messages, **kw):
+                p = messages[0]["content"]
+                if "FINAL RANKING" in p:
+                    return fake_chat(self, model, messages, **kw)
+                if "precisa DECIDIR" in p:
+                    return Reply(ok=True, content="DECISION:\nacho que sim", usage=Usage(9, 9))
+                return Reply(ok=True, content="Resposta do membro.", usage=Usage(5, 5))
+
+            Endpoint.chat = chat_ruim
+            AnthropicEndpoint.chat = chat_ruim
+            a = _Args23(); a.question = "ilegivel texto?"; a.quiet = False
+            rc, out, err = _delib(a)
+            check(rc == 1 and "ilegivel" in err,
+                  f"decisao ilegivel em modo texto: exit 1 com aviso ({err.strip()[-50:]})")
+            a = _Args23(); a.question = "ilegivel json?"; a.json = True
+            rc, out, err = _delib(a)
+            check(rc == 1 and json.loads(out)["decision"] is None,
+                  "decisao ilegivel em --json: exit 1 (predicado unificado)")
+            Endpoint.chat = chat_delib23
+            AnthropicEndpoint.chat = chat_delib23
 
             a = _Args23(); a.bundle = "-"; a.question = "com stdin?"
             import sys as _sys23

@@ -378,6 +378,9 @@ def cmd_deliberate(args) -> int:
             _err(f"presidente '{args.chairman}' nao esta no conselho configurado")
             return 2
 
+    if not args.profile:
+        _err("--profile e obrigatorio (o caso sem perfil e o proprio 'ask')")
+        return 2
     perfil = cfg.profiles.get(args.profile)
     if perfil is None:
         disponiveis = ", ".join(sorted(cfg.profiles)) or "(nenhum definido no council.toml)"
@@ -405,7 +408,7 @@ def cmd_deliberate(args) -> int:
             casa = []
             for p in registros:
                 r = json.loads(p.read_text(encoding="utf-8"))
-                if prefixo in p.name or prefixo in (r.get("sha256") or ""):
+                if p.stem.endswith(prefixo) or (r.get("sha256") or "").startswith(prefixo):
                     casa.append(r)
             if not casa:
                 _err(f"--ref '{prefixo}' nao casa nenhum registro em {runs_dir}")
@@ -424,10 +427,14 @@ def cmd_deliberate(args) -> int:
         runs_dir.mkdir(parents=True, exist_ok=True)
     path = save_run(rec, runs_dir)
 
+    # predicado unico de sucesso: decider exige decisao parseada; synthesizer,
+    # sintese ok — nos dois modos de saida (texto e --json).
+    sucesso = rec.decision is not None if perfil.chairman_mode == "decider" \
+        else bool(rec.synthesis.get("ok"))
+
     if args.json:
         print(json.dumps(asdict(rec) | {"sha256": rec.digest()}, ensure_ascii=False, indent=2))
-        ok = rec.decision is not None if perfil.chairman_mode == "decider" else rec.synthesis.get("ok")
-        return 0 if ok else 1
+        return 0 if sucesso else 1
 
     if rec.decision:
         d = rec.decision
@@ -454,7 +461,7 @@ def cmd_deliberate(args) -> int:
                          f"--bundle {args.bundle}' para ver{RESET}")
             except Exception:
                 pass  # cortesia; nunca derruba a deliberacao
-    return 0 if (rec.decision or rec.synthesis.get("ok")) else 1
+    return 0 if sucesso else 1
 
 
 # -------------------------------------------------------------------- audit
@@ -592,7 +599,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     dl = sub.add_parser("deliberate", help="deliberacao com perfil: bundle, papeis e decisao")
     dl.add_argument("question", nargs="?", help="a pergunta (ou stdin)")
-    dl.add_argument("--profile", required=True, help="nome do perfil em [profiles] do council.toml")
+    dl.add_argument("--profile", help="nome do perfil em [profiles] do council.toml")
     dl.add_argument("--bundle", help="arquivo de evidencia da deliberacao, ou - para stdin")
     dl.add_argument("--ref", action="append", help="prefixo de sha de deliberacao anterior (repetivel)")
     dl.add_argument("--members", help="subconjunto por nome, separado por virgula")

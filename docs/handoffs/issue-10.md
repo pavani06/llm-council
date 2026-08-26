@@ -3,10 +3,11 @@ PR #25 · branch issue/10-cli-deliberate (código em f7dd08114e34) · 2026-08-26
 
 ## O que mudou no repo
 - `council/cli.py`: subcomando `deliberate` (QUESTION, --profile obrigatório, --bundle CAMINHO|- com erro nomeado, --ref prefixo repetível resolvendo sha256 completo do registro mais recente que casa, --members/--chairman/--json/--quiet). Saída: `[STATUS] escolha — confiança` + dissidências/fundamentos (decider) ou síntese; audit in-memory com bundle vira aviso dim pós-execução apontando o comando de auditoria.
-- `test_offline.py`: seção 23 (9 checks: E2E decider, registro, --json, 4 erros exit 2, --ref encadeado, --bundle -).
+- `test_offline.py`: seção 23 (13 checks: E2E decider, registro, --json, erros exit 2 (perfil ausente/inexistente/ref substring/bundle ilegivel), --ref encadeado, --bundle -, decisao ilegivel nos dois modos).
 
 ## Decisões tomadas em voo (fora do plano)
-- `--ref` casa por prefixo NO NOME do arquivo OU no sha256 do registro; múltiplos casamentos → o mais recente por `started_at`.
+- `--ref` casa por PREFIXO (startswith no sha256 ou sufixo do nome de arquivo); substring do meio é recusada; múltiplos casamentos → o mais recente por `started_at`.
+- Predicado de sucesso único para texto e --json: decider exige decisão parseada; synthesizer, síntese ok.
 - Exit codes: 0 = decisão (decider) ou síntese ok; 1 = execução rodou sem produzir decisão/síntese; 2 = erro de entrada (perfil/bundle/ref/members) nomeado.
 - Audit in-memory é cortesia (try/except nunca derruba), mesmo padrão do `ask`.
 
