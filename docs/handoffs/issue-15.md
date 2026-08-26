@@ -10,7 +10,7 @@ PR #28 · branch issue/15-gate-final (código em 1d426da8ccdd) · 2026-08-26
 - Caminho (a) confirmado pelo operador no lançamento: PR completo; fechamento do épico #1 pendente de #13/#14.
 
 ## Pegadinhas descobertas
-- (preenchido pós-smoke se houver)
+- Nenhuma: smoke correu limpo no master; unico aviso foi o selo acusando arvore suja (correto — worktree de revisao existia).
 
 ## O que a próxima issue precisa saber
 - Fechamento do épico #1: marcar checklist (#2-#15), verificar #13/#14, usar a evidência deste PR como prova do gate final.
