@@ -1732,6 +1732,171 @@ model = "gpt-5.6-sol"
               == "DECIDIDO",
               "o parcial preservado carrega a deliberacao inteira, nao um toco")
 
+    print("27) custo e latencia do estagio 2 no registro")
+    import contextlib as _ctx27
+    import io as _io27
+    import tempfile as _t27
+    from council import audit as _ad27
+    from council import cli as _cli27
+    from council import judgment as _jd27
+    from council import runs as _runs27
+    from council.engine import Candidate as _Cand27
+    from council.engine import finalize_run as _fin27
+
+    cfg27 = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg27.has_key = lambda p: True
+    cfg27.settings.seed = 7
+
+    def chat27(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            if model == "glm-5.3":
+                return Reply(ok=False, error="429 rate limit", usage=Usage(700, 0), latency_s=2.5)
+            base = fake_chat(self, model, messages, **kw)
+            return Reply(ok=True, content=base.content, usage=Usage(700, 120), latency_s=3.5)
+        if "preside um conselho" in p:
+            return Reply(ok=True, content="SINTESE FINAL", usage=Usage(50, 20), latency_s=4.5)
+        return Reply(ok=True, content=RESPOSTAS.get(model, "?"), usage=Usage(5, 5), latency_s=1.5)
+
+    orig_e27, orig_a27 = Endpoint.chat, AnthropicEndpoint.chat
+    Endpoint.chat = chat27
+    AnthropicEndpoint.chat = chat27
+    try:
+        rec27 = Council(cfg27).run("quanto custou o estagio 2?")
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e27, orig_a27
+
+    # (a) cedula ok e cedula falhada gravam custo e relogio; sem chamada fica None
+    oks27 = [b for b in rec27.stage2 if b["ok"]]
+    falhas27 = [b for b in rec27.stage2 if not b["ok"]]
+    check(len(oks27) == 3 and len(falhas27) == 1,
+          f"fixture com 3 cedulas ok e 1 falhada ({len(oks27)} ok, {len(falhas27)} falha)")
+    check(all(b["usage"]["total_tokens"] == 820 and b["latency_s"] == 3.5 for b in oks27),
+          f"cedula ok grava usage e latency_s ({oks27[0]['usage']}, {oks27[0]['latency_s']}s)")
+    check(falhas27[0]["usage"]["total_tokens"] == 700 and falhas27[0]["latency_s"] == 2.5,
+          f"cedula FALHADA grava o que o provedor reportou ({falhas27[0]['usage']}, "
+          f"{falhas27[0]['latency_s']}s)")
+    sozinho27 = Council(cfg27)._rank_one(
+        cfg27.members[0], 0, "q?",
+        [_Cand27(id="x", text="t", author=cfg27.members[0].name)], seed=7)
+    check(not sozinho27.ok and sozinho27.usage is None and sozinho27.latency_s is None,
+          f"cedula sem chamada fica None, nao zero ({sozinho27.usage}, {sozinho27.latency_s})")
+
+    # (b) identidade aritmetica do usage_by_stage
+    ubs27 = rec27.usage_by_stage
+    soma27 = {k: ubs27["stage1"][k] + ubs27["stage2"][k] + ubs27["synthesis"][k]
+              for k in ("prompt_tokens", "completion_tokens", "total_tokens")}
+    check(ubs27["total"] == soma27,
+          f"total == stage1+stage2+synthesis ({ubs27['total']} vs {soma27})")
+    check(ubs27["stage2"]["total_tokens"] == 3 * 820 + 700,
+          f"estagio 2 somado por inteiro, cedula falhada inclusa ({ubs27['stage2']['total_tokens']})")
+
+    # (c) 'usage' nao muda de semantica: continua estagio 1 + presidente
+    antiga27 = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    for b27 in list(rec27.stage1) + ([rec27.synthesis] if rec27.synthesis else []):
+        for k27 in antiga27:
+            antiga27[k27] += int((b27.get("usage") or {}).get(k27) or 0)
+    check(rec27.usage == antiga27,
+          f"'usage' mantem a conta historica, estagio 1 + presidente ({rec27.usage})")
+    check(rec27.usage["total_tokens"]
+          == ubs27["stage1"]["total_tokens"] + ubs27["synthesis"]["total_tokens"],
+          "e ela e exatamente stage1 + synthesis, sem o estagio 2")
+    check(ubs27["total"]["total_tokens"] > rec27.usage["total_tokens"],
+          f"o total real supera o 'usage': {ubs27['stage2']['total_tokens']} tokens do estagio 2 "
+          f"eram invisiveis")
+
+    # (d) registro anterior a C2 reabre sem quebrar, campos novos ausentes = neutros
+    velho27 = {
+        "sha256": "b" * 64,
+        "question": "pergunta de um registro velho",
+        "started_at": "2026-08-24T10:57:48+00:00",
+        "elapsed_s": 12.5,
+        "members": [{"name": "gpt", "provider": "openai", "model": "gpt-5.6-terra"},
+                    {"name": "claude", "provider": "anthropic", "model": "claude-opus-5"}],
+        "stage1": [{"name": "gpt", "ok": True, "content": "Use indice parcial."},
+                   {"name": "claude", "ok": True, "content": "Meca com EXPLAIN ANALYZE."}],
+        "stage2": [{"ranker": "gpt", "ok": True, "error": "", "label_to_member": {"A": "claude"},
+                    "order_labels": ["A"], "order_members": ["claude"], "verdicts": {}, "raw": ""}],
+        "consensus": [{"member": "claude", "score": 0.9, "positions": [1], "ballots": 1,
+                       "spread": 0.0, "strengths": [], "weaknesses": []}],
+        "synthesis": {"content": "Use indice parcial e meca com EXPLAIN ANALYZE."},
+        "usage": {"prompt_tokens": 10, "completion_tokens": 10, "total_tokens": 20},
+        "warnings": [],
+    }
+    check("usage_by_stage" not in velho27 and all("usage" not in b for b in velho27["stage2"]),
+          "o fixture e mesmo anterior a C2 (sem usage_by_stage, cedula sem custo)")
+    with _t27.TemporaryDirectory() as td27:
+        d27 = Path(td27) / "runs"
+        d27.mkdir(parents=True)
+        (d27 / "20260824T105748+0000-bbbbbbbbbbbb.json").write_text(
+            json.dumps(velho27, ensure_ascii=False), encoding="utf-8")
+        cfg_v27 = cfgmod.load(Path(__file__).parent / "council.toml")
+        cfg_v27.has_key = lambda p: True
+        cfg_v27.settings.runs_dir = str(d27)
+        orig_load27 = cfgmod.load
+        cfgmod.load = lambda p=None: cfg_v27
+        buf27 = _io27.StringIO()
+        try:
+            with _ctx27.redirect_stdout(buf27):
+                rc27 = _cli27.cmd_show(type("A27", (), {"config": None, "sha": None,
+                                                        "raw": False})())
+        finally:
+            cfgmod.load = orig_load27
+        check(rc27 == 0 and "pergunta de um registro velho" in buf27.getvalue(),
+              "'council show' reabre registro anterior a C2 sem quebrar")
+        check(_jd27.carregar(d27)[1].get("usage_by_stage", {}) == {},
+              "campo novo ausente e lido como neutro")
+        check(isinstance(_ad27.auditar(velho27).acrescimos, list),
+              "auditoria do registro velho segue funcionando")
+
+    # (f) retorno antecipado tambem diz o custo: falha paga nao vira registro mudo
+    def chat_so_falha27(self, model, messages, **kw):
+        return Reply(ok=False, usage=Usage(900, 0), latency_s=1.0,
+                     error="conteudo vazio (finish_reason=length) — o modelo gastou o teto raciocinando")
+
+    Endpoint.chat = chat_so_falha27
+    AnthropicEndpoint.chat = chat_so_falha27
+    try:
+        with _t27.TemporaryDirectory() as td27c:
+            d27c = Path(td27c) / "runs"
+            mudo27 = Council(cfg27).run("e se todas falharem?", runs_dir=d27c)
+            gravado27 = json.loads(_fin27(mudo27, d27c).read_text(encoding="utf-8"))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e27, orig_a27
+    check(not [x for x in mudo27.stage1 if x.get("ok")] and mudo27.synthesis == {},
+          "fixture: nenhuma resposta valida, execucao sai pelo retorno antecipado")
+    check(mudo27.usage_by_stage["stage1"]["total_tokens"] == 4 * 900,
+          f"o que a falha custou aparece mesmo assim ({mudo27.usage_by_stage['stage1']})")
+    check(mudo27.usage == {},
+          f"e o 'usage' historico segue vazio nesse caminho, como sempre foi ({mudo27.usage})")
+    check(gravado27["usage_by_stage"]["total"]["total_tokens"] == 4 * 900,
+          "custo da falha sobrevive no registro gravado, nao so em memoria")
+
+    cfg_sem27 = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg_sem27.has_key = lambda p: False
+    sem27 = Council(cfg_sem27).run("e sem conselheiro nenhum?")
+    check(sem27.usage_by_stage["total"]["total_tokens"] == 0,
+          f"sem conselheiro: decomposicao zerada ({sem27.usage_by_stage['total']})")
+    CHAVES27 = {"stage1", "stage2", "synthesis", "total"}
+    check(all(set(r.usage_by_stage) == CHAVES27 for r in (rec27, mudo27, sem27)),
+          "todo registro pos-C2 carrega as quatro chaves — '{}' so pode ser registro anterior")
+
+    # (e) o parcial de C1 carrega a decomposicao, senao mentiria por omissao
+    with _t27.TemporaryDirectory() as td27b:
+        d27b = Path(td27b) / "runs"
+        Endpoint.chat = chat27
+        AnthropicEndpoint.chat = chat27
+        try:
+            rec27b = Council(cfg27).run("parcial com custo?", runs_dir=d27b)
+        finally:
+            Endpoint.chat, AnthropicEndpoint.chat = orig_e27, orig_a27
+        p27 = json.loads(
+            _runs27.partial_path(d27b, rec27b.started_at).read_text(encoding="utf-8"))
+        check(p27["usage_by_stage"]["stage2"]["total_tokens"] == 3 * 820 + 700
+              and p27["usage_by_stage"]["total"]["total_tokens"] > p27["usage"]["total_tokens"],
+              f"parcial carrega usage_by_stage, nao so o 'usage' historico "
+              f"({p27['usage_by_stage']['total']})")
+
     print()
     print()
     if FALHAS:

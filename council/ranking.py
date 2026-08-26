@@ -24,6 +24,9 @@ class Ballot:
     error: str = ""
     raw: str = ""
     truncated: bool = False
+    # custo (aditivo; None = nao houve chamada ao provedor, que e diferente de zero)
+    usage: dict[str, int] | None = None
+    latency_s: float | None = None
 
     @property
     def ranked_members(self) -> list[str]:
