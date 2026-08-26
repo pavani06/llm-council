@@ -1,5 +1,5 @@
 # Handoff — issue #31 (C2)
-PR #<n> · branch issue/31-custo-estagio2 (código em <sha12>) · 2026-08-26
+PR #37 · branch issue/31-custo-estagio2 (código em 7a4fe2a24676) · 2026-08-26
 
 ## O que mudou no repo
 - `council/ranking.py`: `Ballot` ganha `usage: dict | None` e `latency_s: float | None` ao fim, defaults `None`.
