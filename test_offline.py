@@ -1445,6 +1445,25 @@ stage1_format = "questions"
             ask_t = next(t for t in ferramentas if t["name"] == "council_ask")
             check("required" in ask_t["inputSchema"] and "question" in ask_t["inputSchema"]["properties"],
                   "schema do council_ask inalterado")
+            debate_t = next(t for t in ferramentas if t["name"] == "council_debate")
+            check("tabela de consenso" in debate_t["description"],
+                  "descricao do council_debate sem drift (byte-identica ao original)")
+
+            # regressoes da revisao: entrada invalida nunca e silencio
+            r = _call24({"question": "q?", "profile": "cont", "run_refs": "abc"})
+            check(r["result"].get("isError") is True and "lista de prefixos" in r["result"]["content"][0]["text"],
+                  f"run_refs como string e recusado ({r['result']['content'][0]['text'][:50]})")
+            r = _call24({"question": "q?", "profile": "cont", "run_refs": [""]})
+            check(r["result"].get("isError") is True,
+                  "run_refs com string vazia e recusado (startswith('') casaria tudo)")
+            r = _call24({"question": "q?", "profile": "cont", "members": "fantasma"})
+            check(r["result"].get("isError") is True and "fantasma" in r["result"]["content"][0]["text"],
+                  f"members sem casamento e erro nomeado, nao silencio ({r['result']['content'][0]['text'][:50]})")
+            r = _call24({"question": "   ", "profile": "cont"})
+            check(r["result"].get("isError") is True and "pergunta vazia" in r["result"]["content"][0]["text"],
+                  f"pergunta vazia e erro de dominio nomeado ({r['result']['content'][0]['text'][:50]})")
+            check(all("text" not in c for c in corpo["candidates"]),
+                  "candidates de fato sem texto cru")
         finally:
             _cfgmod24.load = orig_load24
             Endpoint.chat, AnthropicEndpoint.chat = orig_e24, orig_a24

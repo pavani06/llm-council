@@ -3,7 +3,7 @@ PR #26 · branch issue/11-mcp-deliberate (código em 53a0437acfca) · 2026-08-26
 
 ## O que mudou no repo
 - `council/mcp_server.py`: ferramenta `council_deliberate` (schema question+profile required; bundle/run_refs/members opcionais), handler `tool_deliberate` + exceção `Ferramenta` (vira isError nomeado, nunca derruba o servidor). Resposta JSON: perfil, candidates (id/author sem texto cru), consensus resumido, decision, sintese, dividido, avisos, bundle_sha256, run_refs, tokens, sha256, registro.
-- `test_offline.py`: seção 24 (8 checks: decisão via handle(), perfil/refs → isError nomeado, stateless entre chamadas, tools/list com 3 e schema do ask inalterado).
+- `test_offline.py`: seção 24 (13 checks: os anteriores + drift da descricao do debate, run_refs string/vazio recusados, members sem casamento, pergunta vazia, candidates sem texto).
 
 ## Decisões tomadas em voo (fora do plano)
 - Erros da ferramenta: exceção `Ferramenta` capturada pelo `handle()` existente → conteúdo isError com a mensagem nomeada (o padrão "falha do conselho: ..." do servidor) — sem mudar o loop de dispatch.

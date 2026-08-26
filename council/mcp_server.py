@@ -48,7 +48,7 @@ TOOLS: list[dict[str, Any]] = [
         "name": "council_debate",
         "description": (
             "Igual ao council_ask, mas devolve o material bruto em vez de so a sintese: a resposta "
-            "de cada conselheiro, a tabela de consensus (Borda normalizado, posicoes e dispersao), o "
+            "de cada conselheiro, a tabela de consenso (Borda normalizado, posicoes e dispersao), o "
             "ponto forte e a falha que cada avaliador cego apontou, os avisos de falha, e a sintese "
             "final. Use quando importar ONDE os modelos discordam — nao apenas qual e a resposta."
         ),
@@ -192,19 +192,30 @@ def tool_deliberate(args: dict) -> str:
         disponiveis = ", ".join(sorted(cfg.profiles)) or "(nenhum definido no council.toml)"
         raise Ferramenta(f"perfil '{nome}' nao existe. Disponiveis: {disponiveis}")
 
+    question = args.get("question") or ""
+    if not question.strip():
+        raise Ferramenta("pergunta vazia — a deliberacao precisa de uma pergunta")
+
     if args.get("members"):
         wanted = {n.strip() for n in args["members"].split(",")}
         picked = [m for m in cfg.members if m.name in wanted]
-        if picked:
-            cfg.members = picked
+        if not picked:
+            raise Ferramenta(
+                f"members nao casa nenhum conselheiro (pedidos: {sorted(wanted)}; "
+                f"disponiveis: {sorted(m.name for m in cfg.members)})"
+            )
+        cfg.members = picked
 
     refs: list[str] = []
     if args.get("run_refs"):
+        crus = args["run_refs"]
+        if not isinstance(crus, list) or not all(isinstance(x, str) and x.strip() for x in crus):
+            raise Ferramenta("run_refs deve ser uma lista de prefixos de sha256 nao vazios")
         runs_dir = Path(cfg.settings.runs_dir)
         if not runs_dir.is_absolute():
             runs_dir = cfg.source.parent / runs_dir
         registros = sorted(runs_dir.glob("*.json")) if runs_dir.is_dir() else []
-        for prefixo in args["run_refs"]:
+        for prefixo in crus:
             casa = []
             for p in registros:
                 r = json.loads(p.read_text(encoding="utf-8"))
@@ -215,7 +226,7 @@ def tool_deliberate(args: dict) -> str:
             refs.append(max(casa, key=lambda r: r.get("started_at", ""))["sha256"])
 
     council = Council(cfg, progress=lambda s, m: _log(f"{s}: {m}"))
-    rec = council.run(Deliberation(args["question"], profile=perfil,
+    rec = council.run(Deliberation(question, profile=perfil,
                                    bundle=args.get("bundle"), run_refs=refs))
     runs_dir = Path(cfg.settings.runs_dir)
     if not runs_dir.is_absolute():
