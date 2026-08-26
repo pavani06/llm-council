@@ -1,5 +1,5 @@
 # Handoff — issue #9 (T8)
-PR #<n> · branch issue/9-audit-bundle (código em 5030dedb9f20) · 2026-08-26
+PR #24 · branch issue/9-audit-bundle (código em 5030dedb9f20) · 2026-08-26
 
 ## O que mudou no repo
 - `council/audit.py`: `auditar(rec, bundle_text=None)` — corpus inclui bundle; bundle em registro sem `bundle_sha256` → erro nomeado (grounding fictício).
