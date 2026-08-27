@@ -2235,8 +2235,10 @@ model = "gpt-5.6-sol"
         rc, out, err = _cost29(a)
         est5 = json.loads(out)
         check(rc == 0 and est5["chamadas_por_provedor"] == {}
-              and any("nao chama ninguem" in s for s in est5["suposicoes"]),
-              f"sem membros ativos: zero chamadas, sem presidente fantasma ({est5['chamadas_por_provedor']})")
+              and any("nao chama ninguem" in s for s in est5["suposicoes"])
+              and not any("presidente" in s for s in est5["suposicoes"]),
+              f"sem membros ativos: zero chamadas, sem presidente fantasma "
+              f"({est5['chamadas_por_provedor']}, {est5['suposicoes']})")
         cfg29.has_key = lambda p: True
 
         # (c) estimate sem historico: exit proprio, mensagem nomeada, nenhum numero

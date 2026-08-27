@@ -161,16 +161,17 @@ def estimate(cfg: Config, runs_dir: Path, profile: str | None = None) -> dict[st
                     t[k] += qtd * medianas[estagio][k]
         tokens[provider] = t
 
-    suposicoes = ["todos os membros respondem no estagio 1"]
     if not membros:
         suposicoes = ["nenhum membro ativo (sem chave): a execucao nao chama ninguem"]
-    elif roda_stage2:
-        suposicoes.append(
-            f"com {n} membros, cada respondente destila ao menos 1 candidato valido "
-            f"e o estagio 2 roda: 1 cedula por respondente (auto-exclusao nao muda o n de chamadas)")
     else:
-        suposicoes.append(f"com {n} membros o estagio 2 e pulado (menos de 3 candidatos)")
-    suposicoes.append("presidente faz 1 chamada no caminho normal (sem impasse de decisor)")
+        suposicoes = ["todos os membros respondem no estagio 1"]
+        if roda_stage2:
+            suposicoes.append(
+                f"com {n} membros, cada respondente destila ao menos 1 candidato valido "
+                f"e o estagio 2 roda: 1 cedula por respondente (auto-exclusao nao muda o n de chamadas)")
+        else:
+            suposicoes.append(f"com {n} membros o estagio 2 e pulado (menos de 3 candidatos)")
+        suposicoes.append("presidente faz 1 chamada no caminho normal (sem impasse de decisor)")
 
     return {
         "membros": n,
