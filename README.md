@@ -12,6 +12,40 @@ presidente `gpt-5.6-sol`, de fora do conselho.
 Derivado do `llm-council` do Karpathy, com as correções que a versão original não tem: cegamento
 que de fato cega, agregação por Borda em vez de ranking descartado, e falha nunca silenciosa.
 
+## Em linguagem de negócio
+
+**Para que serve.** Decisão importante de plano costuma ouvir uma só voz — o executor de
+plantão. O council coloca quatro modelos de IA de quatro fornecedores diferentes (OpenAI,
+DeepSeek, Anthropic, z.ai) para responder à mesma pergunta, avaliar as respostas uns dos
+outros **às cegas** — ninguém sabe de quem é o texto que está julgando — e entregar uma
+decisão documentada: o placar, quem discorda e por quê, e o grau de confiança.
+
+**O que você recebe.** Um registro permanente e auditável de cada deliberação: a pergunta, as
+respostas completas, as notas que cada avaliador deu às respostas dos outros, o resultado
+agregado e — quando o pedido é "decida" — uma decisão estruturada: `DECIDIDO` ou
+`ENCALHADO`, a escolha, a confiança, as dissidências e os fundamentos. Quando o conselho não
+converge, ele **declara** que está dividido em vez de fabricar consenso.
+
+**Casos de uso reais** (os registros existem e são auditáveis):
+- *"Qual é o próximo passo deste plano?"* — decide a próxima tarefa a partir do relatório
+  da execução anterior (`deliberate --profile continuation`);
+- *"Interrogue este plano antes de comprometer código"* — devolve as perguntas cujas
+  respostas mudariam o plano, ordenadas por quanto mudariam (`deliberate --profile grill`);
+- *"O que a síntese afirmou que ninguém sustentou?"* — auditoria offline que aponta
+  afirmações sem lastro nas respostas (`audit`).
+
+**Quanto custa.** Cada pergunta ao conselho: ~9 chamadas de API, 2 delas na cota do plano
+GLM. Antes de gastar, `council cost --estimate` prevê as chamadas e os tokens da próxima
+deliberação; depois, `council cost` mostra o acumulado por fornecedor, direto dos registros.
+Ler, auditar e julgar é grátis e offline.
+
+**Por que confiar.** Ninguém avalia o próprio texto; a identidade do autor é mascarada antes
+do julgamento; a ordem dos candidatos é sorteada por avaliador; cada registro é selado — diz
+que código, que configuração e que evidência produziram aquele resultado, e nunca é
+reescrito; a síntese do presidente é auditável contra o que os membros de fato disseram. E
+se a execução morre no meio, o que já foi pago fica salvo como parcial marcado — nada
+desaparece em silêncio.
+
 ## Guia passo a passo
 
 Uma volta completa pelo conselho, do setup ao encadeamento de deliberações. Os exemplos
