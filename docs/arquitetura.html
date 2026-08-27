@@ -147,9 +147,9 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
   <p class="lede">Quatro modelos de provedores diferentes respondem à mesma pergunta, avaliam-se <em>sem saber quem escreveu o quê</em> — e, com um perfil, <em>deliberam</em>: papéis por conselheiro, evidência em bundle, candidatos destilados julgados às cegas e uma decisão estruturada em vez de uma síntese.</p>
 
   <dl class="facts">
-    <div class="fact"><dt>Módulos</dt><dd>11</dd></div>
-    <div class="fact"><dt>Linhas (council/)</dt><dd>3 349</dd></div>
-    <div class="fact"><dt>Checagens</dt><dd>313 offline</dd></div>
+    <div class="fact"><dt>Módulos</dt><dd>13</dd></div>
+    <div class="fact"><dt>Linhas (council/)</dt><dd>3 869</dd></div>
+    <div class="fact"><dt>Checagens</dt><dd>393 offline</dd></div>
     <div class="fact"><dt>Perfis</dt><dd>2 · continuation / grill</dd></div>
     <div class="fact"><dt>Ferramentas MCP</dt><dd>3</dd></div>
   </dl>
@@ -417,7 +417,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
         </g>
       </svg>
     </div>
-    <figcaption><b>Três desacoplamentos carregam este desenho.</b> Autores, avaliadores e candidatos são conjuntos distintos — na prática do <code>continuation</code>: um auditor propõe, os outros três julgam, ninguém pontua o próprio texto. O decisor é cego até o último passo: elege "Candidato A", e a escolha é traduzida de volta ao id real antes de entrar no registro. E o ENCALHADO é instrução, não enforcement — o prompt manda declarar impasse quando o topo não tem folga; quem confere o resultado é o operador.</figcaption>
+    <figcaption><b>Três desacoplamentos carregam este desenho.</b> Autores, avaliadores e candidatos são conjuntos distintos — na prática do <code>continuation</code>: um auditor propõe, os outros três julgam, ninguém pontua o próprio texto. O decisor é cego até o último passo: elege "Candidato A", a escolha é traduzida de volta ao id real antes de entrar no registro — e desde a C3 o mapa rótulo → id fica gravado no próprio registro (<code>decision_aliases</code>), então a dissidência que cita "Candidato B" resolve sem reconstruir a ordem do consenso. E o ENCALHADO é instrução, não enforcement — o prompt manda declarar impasse quando o topo não tem folga; quem confere o resultado é o operador.</figcaption>
   </figure>
 
   <div class="split">
@@ -526,7 +526,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
 <section>
   <div class="col">
     <span class="stage-tag">Código</span>
-    <h2>Onze módulos, um só que amarra</h2>
+    <h2>Treze módulos, um só que amarra</h2>
     <p>A dependência interna é um DAG raso e deliberado. Cinco módulos não importam nada de dentro do projeto — são testáveis sem rede, sem config e sem mock. O <code>engine</code> é o único lugar onde tudo se encontra; o <code>structured</code>, folha nova da Fase 1, parseia os blocos estruturados (QUESTIONS, PROPOSAL, DECISION) que os perfis pedem — tolerante a variação de formato, nunca inventando campo.</p>
   </div>
 
@@ -546,7 +546,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
             <rect x="440" y="36" width="180" height="44" rx="2"/>
           </g>
           <text x="230" y="56" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500">cli.py</text>
-          <text x="230" y="71" text-anchor="middle" font-size="10" opacity=".6">ask · deliberate · audit · ab · …</text>
+          <text x="230" y="71" text-anchor="middle" font-size="10" opacity=".6">ask · deliberate · cost · audit · ab · …</text>
           <text x="530" y="56" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-weight="500">mcp_server.py</text>
           <text x="530" y="71" text-anchor="middle" font-size="10" opacity=".6">stdio JSON-RPC · 3 tools</text>
 
@@ -594,28 +594,30 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
           <path d="M 154 282 C 300 338, 560 338, 662 300" fill="none" stroke="currentColor" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#ah2)"/>
           <text x="400" y="338" text-anchor="middle" font-size="10.5" opacity=".7">config monta o Endpoint certo para cada provedor</text>
 
-          <text x="20" y="372" font-size="11" opacity=".7">prompts, structured, ranking, providers e provenance não importam nada do projeto — testáveis isoladamente.</text>
+          <text x="20" y="372" font-size="11" opacity=".7">prompts, structured, ranking, providers e provenance não importam nada do projeto — testáveis isoladamente. Fora do grafo, duas folhas da mesma laia: runs.py (dono único de "o que é um registro parcial") e cost.py (ledger de gasto e pré-voo de chamadas), consumidas por cli, engine e judgment.</text>
         </g>
       </svg>
     </div>
-    <figcaption><b>A direção das setas é a razão de o teste offline existir sem mock de rede.</b> <code>ranking.py</code> concentra cegamento, parsing de cédula e Borda sem conhecer provedor, config ou HTTP; <code>structured.py</code> parseia os blocos de deliberação sem conhecer nada além de <code>re</code> — as 313 checagens exercitam a lógica que decide o resultado sem tocar em nenhuma API.</figcaption>
+    <figcaption><b>A direção das setas é a razão de o teste offline existir sem mock de rede.</b> <code>ranking.py</code> concentra cegamento, parsing de cédula e Borda sem conhecer provedor, config ou HTTP; <code>structured.py</code> parseia os blocos de deliberação sem conhecer nada além de <code>re</code> — as 393 checagens exercitam a lógica que decide o resultado sem tocar em nenhuma API.</figcaption>
   </figure>
 
   <div class="tbl-wrap">
     <table>
       <thead><tr><th class="mono">módulo</th><th>responsabilidade</th><th>linhas</th></tr></thead>
       <tbody>
-        <tr><td class="mono">cli.py</td><td>Oito comandos e a apresentação no terminal — <code>deliberate</code> com perfil, bundle, refs e decisão formatada.</td><td class="num">667</td></tr>
-        <tr><td class="mono">engine.py</td><td>Orquestra os estágios, destila candidatos, roteia decider/synthesizer, monta o registro, transforma falha em aviso nomeado.</td><td class="num">477</td></tr>
+        <tr><td class="mono">cli.py</td><td>Nove comandos e a apresentação no terminal — <code>deliberate</code> com perfil, bundle, refs e decisão formatada; <code>cost</code> com ledger e pré-voo.</td><td class="num">793</td></tr>
+        <tr><td class="mono">engine.py</td><td>Orquestra os estágios, destila candidatos, roteia decider/synthesizer, monta o registro com checkpoint por limite de estágio, transforma falha em aviso nomeado.</td><td class="num">624</td></tr>
         <tr><td class="mono">providers.py</td><td>Fala com os provedores. Dois adaptadores, tipos de erro, contagem de tokens, detecção de truncamento.</td><td class="num">447</td></tr>
-        <tr><td class="mono">mcp_server.py</td><td>Servidor MCP stdio escrito à mão, sem dependência — <code>ask</code>, <code>debate</code> e <code>deliberate</code>, stateless.</td><td class="num">338</td></tr>
+        <tr><td class="mono">mcp_server.py</td><td>Servidor MCP stdio escrito à mão, sem dependência — <code>ask</code>, <code>debate</code> e <code>deliberate</code>, stateless.</td><td class="num">352</td></tr>
         <tr><td class="mono">config.py</td><td>Carrega TOML e <code>.env</code>, valida roster e perfis (papéis, criteria 1-7, modo, formato), monta endpoints.</td><td class="num">279</td></tr>
-        <tr><td class="mono">ranking.py</td><td>Cegamento, parsing tolerante de cédula, Borda, detecção de conselho dividido.</td><td class="num">214</td></tr>
+        <tr><td class="mono">ranking.py</td><td>Cegamento, parsing tolerante de cédula, Borda, detecção de conselho dividido.</td><td class="num">217</td></tr>
         <tr><td class="mono">prompts.py</td><td>Os prompts parametrizáveis que você vai querer editar, isolados de propósito — o default renderiza byte a byte o golden.</td><td class="num">213</td></tr>
         <tr><td class="mono">audit.py</td><td>Procura na síntese os termos específicos que nenhuma resposta — nem o bundle — continha.</td><td class="num">207</td></tr>
-        <tr><td class="mono">judgment.py</td><td>Julgamento cego do operador sobre um registro, e a taxa de concordância com o Borda.</td><td class="num">190</td></tr>
+        <tr><td class="mono">judgment.py</td><td>Julgamento cego do operador sobre um registro, e a taxa de concordância com o Borda.</td><td class="num">192</td></tr>
+        <tr><td class="mono">cost.py</td><td>Ledger de gasto por provedor/modelo sobre os registros (final e parcial separados) e pré-voo de chamadas da próxima deliberação.</td><td class="num">186</td></tr>
         <tr><td class="mono">structured.py</td><td>Parseia QUESTIONS, PROPOSAL e DECISION: tolerante à variação real de formato, nunca inventa campo.</td><td class="num">178</td></tr>
         <tr><td class="mono">provenance.py</td><td>Sela no registro o commit, o hash do fonte e o retrato da config — perfis incluídos — que o produziram.</td><td class="num">136</td></tr>
+        <tr><td class="mono">runs.py</td><td>Dono único de "o que é um parcial": sufixo, carimbo e caminho do checkpoint; os leitores deixam parciais de fora.</td><td class="num">39</td></tr>
       </tbody>
     </table>
   </div>
@@ -746,7 +748,7 @@ footer{border-top:1px solid var(--rule); padding-top:24px; color:var(--ink-3); f
 
   <div class="note">
     <span class="lbl">Custódia</span>
-    <p>Cada execução grava <code>runs/&lt;data&gt;-&lt;sha12&gt;.json</code> com a pergunta, as respostas cruas, cada cédula com seu mapa de rótulos, a seed do embaralhamento, o <code>sha256</code> do próprio registro — e o <strong>selo do produtor</strong>: o commit do council, se a árvore estava suja, um hash de todo o fonte do pacote e outro da config resolvida (perfis incluídos — trocar um critério no TOML muda o selo). Numa deliberação, o registro ganha mais quatro âncoras: <code>profile_name</code>, <code>bundle_sha256</code> (o texto do bundle não entra — o hash âncora, o arquivo é do chamador), <code>run_refs</code> (os shas das deliberações anteriores da cadeia) e a <code>decision</code> parseada. Os prompts não são guardados em texto: com o código endereçado por hash e as respostas gravadas, eles são reconstituíveis, e guardá-los inflaria o registro cerca de doze vezes. A seed fixa o embaralhamento dos rótulos, não a saída dos modelos — o registro é <em>inspecionável</em>, não reproduzível: rodar de novo com a mesma seed dá outras respostas. O que ele permite é auditar depois por que o conselho decidiu assim — e, com o selo, saber se o código que produziu aquele registro ainda é o que está na árvore. <code>council show</code> compara e avisa quando divergem.</p>
+    <p>Cada execução grava <code>runs/&lt;data&gt;-&lt;sha12&gt;.json</code> com a pergunta, as respostas cruas, cada cédula com seu mapa de rótulos, a seed do embaralhamento, o <code>sha256</code> do próprio registro — e o <strong>selo do produtor</strong>: o commit do council, se a árvore estava suja, um hash de todo o fonte do pacote e outro da config resolvida (perfis incluídos — trocar um critério no TOML muda o selo). Numa deliberação, o registro ganha mais âncoras: <code>profile_name</code>, <code>bundle_sha256</code> (o texto do bundle não entra — o hash âncora, o arquivo é do chamador), <code>run_refs</code> (os shas das deliberações anteriores da cadeia) e a <code>decision</code> parseada. As correções de registro acrescentaram, sem reescrever nenhuma antiga: a decomposição de custo <code>usage_by_stage</code> (e <code>usage</code>/<code>latency_s</code> por cédula — cédula com <code>usage</code> nulo é chamada que não houve), o mapa <code>decision_aliases</code> (rótulo cego → id real, para citar a dissidência sem reconstruir a ordem do consenso) e a sobrevivência: checkpoint nos limites de estágio, execução interrompida vira parcial marcado em vez de sumir com o que foi pago, sai com exit 130 e os leitores deixam parciais de fora do que tratam como registro. Os prompts não são guardados em texto: com o código endereçado por hash e as respostas gravadas, eles são reconstituíveis, e guardá-los inflaria o registro cerca de doze vezes. A seed fixa o embaralhamento dos rótulos, não a saída dos modelos — o registro é <em>inspecionável</em>, não reproduzível: rodar de novo com a mesma seed dá outras respostas. O que ele permite é auditar depois por que o conselho decidiu assim — e, com o selo, saber se o código que produziu aquele registro ainda é o que está na árvore. <code>council show</code> compara e avisa quando divergem.</p>
   </div>
 </section>
 
