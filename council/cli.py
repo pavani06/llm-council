@@ -631,6 +631,78 @@ def _verificar(cfg, rec: dict, aud) -> int:
     return 0
 
 
+# --------------------------------------------------------------------- cost
+
+
+def cmd_cost(args) -> int:
+    """Ledger de custo acumulado dos registros e pre-voo de chamadas; sem rede."""
+    from . import cost as costmod
+
+    cfg = cfgmod.load(Path(args.config) if args.config else None)
+    if args.members:
+        wanted = {n.strip() for n in args.members.split(",")}
+        cfg.members = [m for m in cfg.members if m.name in wanted]
+        if not cfg.members:
+            _err(f"nenhum conselheiro casa com --members={args.members}")
+            return 2
+    if args.chairman:
+        match = [m for m in cfg.members if m.name == args.chairman]
+        if match:
+            cfg.chairman = match[0]
+        else:
+            _err(f"presidente '{args.chairman}' nao esta no conselho configurado")
+            return 2
+    runs_dir = Path(cfg.settings.runs_dir)
+    if not runs_dir.is_absolute():
+        runs_dir = cfg.source.parent / runs_dir
+
+    if args.estimate:
+        if args.profile and args.profile not in cfg.profiles:
+            disponiveis = ", ".join(sorted(cfg.profiles)) or "(nenhum definido no council.toml)"
+            _err(f"perfil '{args.profile}' nao existe. Disponiveis: {disponiveis}")
+            return 2
+        try:
+            est = costmod.estimate(cfg, runs_dir, profile=args.profile)
+        except costmod.SemHistorico as e:
+            _err(f"estimativa impossivel por falta de historico — {e}")
+            return 3
+        if args.json:
+            print(json.dumps(est, ensure_ascii=False, indent=2))
+        else:
+            print(f"{BOLD}pre-voo da proxima deliberacao{RESET} "
+                  f"({est['membros']} membros, perfil: {est['perfil'] or 'nenhum'})")
+            for provider, c in sorted(est["chamadas_por_provedor"].items()):
+                print(f"  {provider}: stage1 {c['stage1']} + stage2 {c['stage2']} "
+                      f"+ synthesis {c['synthesis']} = {c['total']} chamadas")
+            med = est["medianas_por_estagio"]
+            trecho = ", ".join(f"{e} {m['total_tokens']} tok" for e, m in sorted(med.items()))
+            print(f"medianas por estagio (registros finais: {est['registros_historicos']}): {trecho}")
+            for provider, t in sorted(est["tokens_estimados_por_provedor"].items()):
+                print(f"  {provider}: ~{t['total_tokens']} tok "
+                      f"({t['prompt_tokens']} prompt / {t['completion_tokens']} completion)")
+            print("suposicoes:")
+            for s in est["suposicoes"]:
+                print(f"  - {s}")
+        return 0
+
+    led = costmod.ledger(runs_dir)
+    if args.json:
+        print(json.dumps(led, ensure_ascii=False, indent=2))
+    else:
+        r = led["registros"]
+        print(f"{BOLD}custo acumulado em {runs_dir}{RESET} — {r['finais']} final(is), "
+              f"{r['parciais']} parcial(is), {r['antigos_sem_usage_by_stage']} antigo(s) sem usage_by_stage")
+        for provider, modelos in sorted(led["por_provedor"].items()):
+            for model, pm in sorted(modelos.items()):
+                f, p = pm["final"], pm["parcial"]
+                print(f"  {provider} / {model}: final {f['chamadas']} chamadas, "
+                      f"{f['total_tokens']} tok ({f['prompt_tokens']}+{f['completion_tokens']})"
+                      f" · parcial {p['chamadas']} chamadas, {p['total_tokens']} tok")
+        for nota in led["notas"]:
+            print(f"nota: {nota}")
+    return 0
+
+
 # --------------------------------------------------------------------- main
 
 
@@ -687,9 +759,18 @@ def build_parser() -> argparse.ArgumentParser:
     ag.set_defaults(func=cmd_agreement)
 
     s = sub.add_parser("show", help="mostra um registro salvo")
-    s.add_argument("sha", nargs="?", help="prefixo do sha256; sem isso, o mais recente")
+    s.add_argument("sha", nargs="?", help="prefixo do sha256 do registro; sem isso, o mais recente")
     s.add_argument("--raw", action="store_true", help="JSON cru")
     s.set_defaults(func=cmd_show)
+
+    co = sub.add_parser("cost", help="ledger de custo dos registros e pre-voo de chamadas (sem rede)")
+    co.add_argument("--estimate", action="store_true",
+                    help="estimativa da proxima deliberacao em vez do ledger acumulado")
+    co.add_argument("--json", action="store_true", help="saida em JSON no stdout")
+    co.add_argument("--profile", help="nome do perfil em [profiles] do council.toml (pre-voo)")
+    co.add_argument("--members", help="subconjunto por nome, separado por virgula")
+    co.add_argument("--chairman", help="usa este conselheiro como presidente")
+    co.set_defaults(func=cmd_cost)
     return p
 
 
