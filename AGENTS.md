@@ -1,13 +1,15 @@
 # AGENTS.md — llm-council
 
 Regras para qualquer agente ou operador executando trabalho neste repo.
-Valem para toda issue do épico #1 (Fase 1 — Perfis de Deliberação).
+Valem para todo trabalho aqui: o épico #1 (Fase 1 — Perfis de Deliberação) e o épico
+#29 (correções de registro) estão concluídos; a Fase 2 abre pelo pré-registro selado.
 
 ## Sempre
 
 - Teste: `.venv/bin/python test_offline.py` — exit 0 obrigatório antes de qualquer PR.
-  Nenhuma checagem existente é editada, enfraquecida ou removida. Este repo não tem CI;
-  registre "no required checks configured" em vez de fingir verde.
+  Nenhuma checagem existente é editada, enfraquecida ou removida. CI: o workflow
+  `offline` (GitHub Actions) roda a suíte a cada push/PR; a proteção de branch não o
+  exige como required — registre o resultado real de `gh pr checks`, nunca finja verde.
 - Commit: pt-BR minúsculo sem acento, prefixo de tema (`test:`, `docs:`, `engine:`...),
   um commit por issue (squash no merge). Nunca sem pedido explícito do operador.
 - Stdlib pura: nenhuma dependência nova (SDK `anthropic` é a única, já existente).
@@ -93,5 +95,14 @@ arquivo ANTES do plano.
   `docs/plans/2026-08-25-loop-relay.md` + issue #18 (label `loop`). Lançamento
   exige a frase do operador que nomeia runbook + issue + segmento e os gates
   delegados (template na §7 do runbook); sem ela, é execução individual, não lote.
+- Épicos concluídos: #1 (Fase 1) e #29 (correções de registro — sobrevivência do
+  registro, custo por estágio, `decision_aliases`, destilação de `proposal`,
+  `council cost`), com relatório final na issue #35 e handoffs
+  `docs/handoffs/issue-30..34.md`.
+- **Fase 2 e o selo**: o contrato do experimento 1-vs-N está congelado em
+  `docs/prereg/2026-08-27-experimento-1vsN.md` (tag `prereg-1vsN`). O schema do
+  registro está congelado para o experimento: qualquer mudança antes do seu fim
+  exige emenda nomeada (seção 11 do pré-registro). A primeira issue da Fase 2
+  nasce desse contrato.
 - Épico e grafo de dependências: issue #1. Cópia local do plano pode estar atrás do
   GitHub; em dúvida, o GitHub manda.

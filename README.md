@@ -97,9 +97,16 @@ claude mcp add council -- ~/llm-council/bin/council-mcp
 ```
 
 Custo de referência: `ask` e `deliberate` ≈ 2N+1 chamadas (~9 com o roster atual), das
-quais 2 GLM por questão saem da cota trimestral do coding plan. `audit`, `show`, `ab` e
-`agreement` são offline e grátis. O mapa completo da arquitetura, com os dois caminhos
-(ask e deliberação), está em `docs/arquitetura.html`.
+quais 2 GLM por questão saem da cota trimestral do coding plan. O gasto não precisa ser
+contado à mão: `council cost` acumula o que já foi pago por provedor/modelo direto dos
+registros (final e parcial separados; registro antigo com nota nomeada de subcontagem) e
+`council cost --estimate --profile continuation` é o pré-voo da próxima deliberação —
+chamadas por provedor pela aritmética da config, tokens pelas medianas do histórico;
+sem histórico, exit 3 nomeado e nenhum número inventado. `audit`, `show`, `ab`,
+`agreement` e `cost` são offline e grátis. O mapa completo da arquitetura, com os dois
+caminhos (ask e deliberação), está em `docs/arquitetura.html`; o contrato do experimento
+1-vs-N que abre a Fase 2 está selado em `docs/prereg/2026-08-27-experimento-1vsN.md`
+(tag `prereg-1vsN`).
 
 ## Uso
 
@@ -211,7 +218,12 @@ seed, `sha256` do registro e o **selo do produtor**: commit do council, se a ár
 hash de todo o fonte do pacote e hash da config resolvida. `council show` compara o selo com a
 árvore atual e avisa quando divergem — sem isso, um registro antigo é ininterpretável depois de
 qualquer edição em `prompts.py` ou no roster. Os prompts não são guardados em texto: são
-reconstituíveis a partir do código selado mais as respostas.
+reconstituíveis a partir do código selado mais as respostas. A execução sobrevive à morte do
+processo: checkpoint por limite de estágio, interrupção (Ctrl-C/SIGTERM) grava um **parcial
+marcado** com o que já foi pago e sai com exit 130 — e os leitores deixam parciais de fora. O
+registro também carrega custo por estágio (`usage_by_stage`, `usage`/`latency_s` por cédula) e,
+no decisor cego, o mapa `decision_aliases` (rótulo → id real). Campos novos são apenas aditivos;
+registros antigos jamais são reescritos.
 
 **Deliberação** — um perfil dá papel a cada conselheiro, bundle de evidência à rodada e formato
 ao output: propostas ou questões viram candidatos destilados, ranqueados às cegas como sempre;
@@ -220,7 +232,8 @@ fundamentos`, com a decisão ilegível virando aviso nomeado, nunca invenção),
 dividido, o decisor é instruído a declarar `ENCALHADO` em vez de forjar vitória — a instrução
 está no prompt; quem confere o resultado é você. O bundle entra no registro como sha256;
 deliberações anteriores encadeiam por `run_refs`; no decisor cego os candidatos chegam ao
-presidente como `Candidato A/B/...` e a escolha volta traduzida para o id real. O servidor MCP
+presidente como `Candidato A/B/...` e a escolha volta traduzida para o id real — e o mapa
+rótulo → id fica gravado no registro (`decision_aliases`). O servidor MCP
 segue sem estado — a cadeia de rodadas vive no chamador.
 
 **Falhas** — provedor que cai vira aviso nomeado com o motivo, nunca um silêncio que parece consenso.
@@ -247,7 +260,8 @@ configuração, é ruído.
 ## Testes
 
 ```bash
-.venv/bin/python test_offline.py   # ponta a ponta, sem rede (53+ checagens)
+.venv/bin/python test_offline.py   # ponta a ponta, sem rede (393 checagens)
 ```
 
 Roda também no python do sistema; as checagens que exigem o SDK são puladas com aviso.
+O workflow `offline` do GitHub Actions roda esta suíte a cada push e pull request.
