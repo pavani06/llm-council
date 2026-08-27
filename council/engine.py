@@ -18,7 +18,7 @@ from .prompts import DEFAULT_CRITERIA, chairman_prompt, ranking_prompt, stage1_u
 from .provenance import seal
 from .providers import Reply
 from .runs import partial_path, stamp_for
-from .structured import parse_decision, parse_questions
+from .structured import parse_decision, parse_proposal, parse_questions
 from .ranking import (
     Ballot,
     assign_blind_labels,
@@ -51,7 +51,8 @@ class Deliberation:
 class Candidate:
     """Item ranqueavel no estagio 2. No caminho sem perfil, id = author = nome
     do membro (shape do registro identico ao historico); com questions, cada
-    questao destilada e um candidato proprio."""
+    questao destilada e um candidato proprio; com proposal, o candidato e a
+    proposta destilada (titulo + corpo), uma por membro — id segue o membro."""
 
     id: str
     text: str
@@ -60,11 +61,21 @@ class Candidate:
 
 def _distill(blind_answers: dict[str, str], stage1_format: str,
              member_index: dict[str, int]) -> tuple[list[Candidate], list[str]]:
-    """Respostas ja cegas -> candidatos. questions destila cada questao; parse
-    falho vira aviso nomeado, nao silencio."""
+    """Respostas ja cegas -> candidatos. questions destila cada questao;
+    proposal destila a proposta (titulo + corpo); parse falho vira aviso
+    nomeado, nao silencio."""
     avisos: list[str] = []
     out: list[Candidate] = []
     for name, txt in blind_answers.items():
+        if stage1_format == "proposal":
+            proposta, erro = parse_proposal(txt)
+            if erro:
+                avisos.append(f"destilacao: {name}: {erro}")
+                continue
+            out.append(Candidate(id=name,
+                                 text=f"{proposta['titulo']}\n\n{proposta['corpo']}",
+                                 author=name))
+            continue
         if stage1_format != "questions":
             out.append(Candidate(id=name, text=txt, author=name))
             continue
@@ -421,7 +432,8 @@ class Council:
             return rec
 
         # Destilacao: respostas cegas viram candidatos (questions: uma questao =
-        # um candidato; demais formatos: uma resposta = um candidato).
+        # um candidato; proposal: a proposta destilada de cada membro; demais:
+        # uma resposta = um candidato).
         fmt = spec.profile.stage1_format if spec.profile else "prose"
         member_index = {m.name: i for i, m in enumerate(members)}
         candidates, avisos_destilacao = _distill(blind_answers, fmt, member_index)

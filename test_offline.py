@@ -1042,7 +1042,12 @@ model = "gpt-5.6-sol"
                 return Reply(ok=True, content=f"analise\n\n{decisao}", usage=Usage(9, 9))
             if "preside um conselho" in p:
                 return Reply(ok=True, content="SINTESE FINAL", usage=Usage(9, 9))
-            return Reply(ok=True, content="Resposta do membro sobre o passo.", usage=Usage(5, 5))
+            # estagio 1: resposta no formato que o perfil proposal exige
+            # (analise + bloco) — desde C4 a destilacao exige bloco valido
+            return Reply(ok=True,
+                         content="Resposta do membro sobre o passo.\nPROPOSAL:\n"
+                                 "TITULO: plano do membro\nCORPO:\nseguir o passo com disciplina",
+                         usage=Usage(5, 5))
         return _chat
 
     prof_dec = _Prof3(name="cont", chairman_mode="decider", stage1_format="proposal")
@@ -1324,7 +1329,7 @@ model = "gpt-5.6-sol"
             return Reply(ok=True, content="analise\n\nDECISION:\nDECIDIDO | Candidato A | alta | nenhuma | segue", usage=Usage(9, 9))
         if "preside um conselho" in p:
             return Reply(ok=True, content="SINTESE", usage=Usage(9, 9))
-        return Reply(ok=True, content="Resposta do membro.", usage=Usage(5, 5))
+        return Reply(ok=True, content="Resposta do membro.\nPROPOSAL:\nTITULO: plano do membro\nCORPO:\nseguir o passo com disciplina", usage=Usage(5, 5))
 
     with _t23.TemporaryDirectory() as td23:
         d23 = Path(td23)
@@ -1402,7 +1407,7 @@ model = "gpt-5.6-sol"
                     return fake_chat(self, model, messages, **kw)
                 if "precisa DECIDIR" in p:
                     return Reply(ok=True, content="DECISION:\nacho que sim", usage=Usage(9, 9))
-                return Reply(ok=True, content="Resposta do membro.", usage=Usage(5, 5))
+                return Reply(ok=True, content="Resposta do membro.\nPROPOSAL:\nTITULO: plano do membro\nCORPO:\nseguir o passo com disciplina", usage=Usage(5, 5))
 
             Endpoint.chat = chat_ruim
             AnthropicEndpoint.chat = chat_ruim
@@ -1449,7 +1454,7 @@ model = "gpt-5.6-sol"
             return fake_chat(self, model, messages, **kw)
         if "precisa DECIDIR" in p:
             return Reply(ok=True, content="DECISION:\nDECIDIDO | Candidato A | alta | nenhuma | segue", usage=Usage(9, 9))
-        return Reply(ok=True, content="Resposta do membro.", usage=Usage(5, 5))
+        return Reply(ok=True, content="Resposta do membro.\nPROPOSAL:\nTITULO: plano do membro\nCORPO:\nseguir o passo com disciplina", usage=Usage(5, 5))
 
     with _t24.TemporaryDirectory() as td24:
         d24 = Path(td24)
@@ -1738,7 +1743,7 @@ model = "gpt-5.6-sol"
         if "precisa DECIDIR" in p:
             return Reply(ok=True, content="DECISION:\nDECIDIDO | Candidato A | alta | nenhuma | segue",
                          usage=Usage(9, 9))
-        return Reply(ok=True, content="Resposta do membro.", usage=Usage(5, 5))
+        return Reply(ok=True, content="Resposta do membro.\nPROPOSAL:\nTITULO: plano do membro\nCORPO:\nseguir o passo com disciplina", usage=Usage(5, 5))
 
     with _t26.TemporaryDirectory() as td26d:
         d26d = Path(td26d) / "runs"
@@ -1937,6 +1942,117 @@ model = "gpt-5.6-sol"
               and p27["usage_by_stage"]["total"]["total_tokens"] > p27["usage"]["total_tokens"],
               f"parcial carrega usage_by_stage, nao so o 'usage' historico "
               f"({p27['usage_by_stage']['total']})")
+
+    print("28) destilacao de proposal no estagio 2")
+    from council.config import Profile as _Prof28
+    from council.engine import Deliberation as _Del28
+
+    cfg28 = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg28.has_key = lambda p: True
+
+    CEDULAS28 = []
+    IDX28 = {"gpt-5.6-terra": 0, "deepseek-v4-pro": 1, "claude-opus-5": 2, "glm-5.3": 3}
+
+    def resposta_proposta(i, analise="analise critica do membro", titulo=None, corpo=None):
+        # formato que a diretriz do estagio 1 pede: analise curta + bloco
+        return (f"{analise} {i}\nPROPOSAL:\nTITULO: {titulo if titulo is not None else f'plano {i}'}\n"
+                f"CORPO:\n{corpo if corpo is not None else f'passo {i}.a; passo {i}.b'}")
+
+    def chat_prop28(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            CEDULAS28.append(p)
+            return fake_chat(self, model, messages, **kw)
+        if "preside um conselho" in p:
+            return Reply(ok=True, content="SINTESE", usage=Usage(5, 5))
+        return Reply(ok=True, content=resposta_proposta(IDX28[model]), usage=Usage(5, 5))
+
+    orig_e28, orig_a28 = Endpoint.chat, AnthropicEndpoint.chat
+    Endpoint.chat = chat_prop28
+    AnthropicEndpoint.chat = chat_prop28
+    try:
+        prof_p28 = _Prof28(name="prop28", roles={}, stage1_format="proposal")
+        r_p28 = Council(cfg28).run(_Del28("como evoluir o registro?", profile=prof_p28))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e28, orig_a28
+
+    # (a) candidato e so a proposta destilada (titulo + corpo); id segue o membro
+    destilados = {c["author"]: c["text"] for c in r_p28.candidates}
+    check(all(destilados[n] == f"plano {i}\n\npasso {i}.a; passo {i}.b"
+              for n, i in (("gpt", 0), ("deepseek", 1), ("claude", 2), ("glm", 3))),
+          f"candidates traz so titulo+corpo destilados ({list(destilados.items())[:1]}…)")
+    check(all(c["id"] == c["author"] for c in r_p28.candidates),
+          "id de candidato continua o nome do membro (uma proposta por conselheiro)")
+    inteiras = {a["name"]: a["content"] for a in r_p28.stage1}
+    check(all("analise critica do membro" in t and "PROPOSAL:" in t for t in inteiras.values()),
+          "stage1 preserva a resposta inteira (analise + bloco)")
+
+    # o ranking cego le somente o destilado: analise fora, titulo e corpo dentro
+    check(len(set(CEDULAS28)) == 4, f"4 cedulas capturadas ({len(set(CEDULAS28))})")
+    check(all("analise critica do membro" not in p for p in CEDULAS28),
+          "prompt de cedula sem a analise que precede o bloco")
+    check(all(len([i for i in range(4) if f"plano {i}" in p]) == 3 for p in CEDULAS28)
+          and all(f"passo {i}" in p for p in CEDULAS28 for i in range(4) if f"plano {i}" in p),
+          "cada cedula carrega titulo E corpo dos 3 candidatos elegiveis")
+
+    # (b1) membro sem bloco: aviso nomeado + exclusao; o run segue com o ranking
+    def chat_sem_bloco28(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            return fake_chat(self, model, messages, **kw)
+        if "preside um conselho" in p:
+            return Reply(ok=True, content="SINTESE", usage=Usage(5, 5))
+        if model == "gpt-5.6-terra":
+            return Reply(ok=True, content="so analise, sem bloco nenhum", usage=Usage(5, 5))
+        return Reply(ok=True, content=resposta_proposta(IDX28[model]), usage=Usage(5, 5))
+
+    orig_e28b, orig_a28b = Endpoint.chat, AnthropicEndpoint.chat
+    Endpoint.chat = chat_sem_bloco28
+    AnthropicEndpoint.chat = chat_sem_bloco28
+    try:
+        r_sb28 = Council(cfg28).run(
+            _Del28("q?", profile=_Prof28(name="sb28", stage1_format="proposal")))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e28b, orig_a28b
+
+    check({c["author"] for c in r_sb28.candidates} == {"deepseek", "claude", "glm"},
+          f"membro sem bloco fica de fora dos candidatos ({[c['author'] for c in r_sb28.candidates]})")
+    check(any(w == "destilacao: gpt: bloco PROPOSAL ausente" for w in r_sb28.warnings),
+          f"aviso nomeado de parse falho ({[w for w in r_sb28.warnings if 'destilacao' in w]})")
+    check(len(r_sb28.stage2) == 4 and all(b["ok"] for b in r_sb28.stage2)
+          and len(r_sb28.consensus) == 3,
+          "run segue: 4 avaliadores, cedulas validas, consenso com os 3 destilados")
+
+    # (b2) TITULO vazio: outro erro nomeado, outro membro excluido, idem run
+    def chat_titulo_vazio28(self, model, messages, **kw):
+        p = messages[0]["content"]
+        if "FINAL RANKING" in p:
+            return fake_chat(self, model, messages, **kw)
+        if "preside um conselho" in p:
+            return Reply(ok=True, content="SINTESE", usage=Usage(5, 5))
+        if model == "deepseek-v4-pro":
+            return Reply(ok=True, content="PROPOSAL:\nTITULO:\nCORPO:\ncorpo valido",
+                         usage=Usage(5, 5))
+        return Reply(ok=True, content=resposta_proposta(IDX28[model]), usage=Usage(5, 5))
+
+    orig_e28c, orig_a28c = Endpoint.chat, AnthropicEndpoint.chat
+    Endpoint.chat = chat_titulo_vazio28
+    AnthropicEndpoint.chat = chat_titulo_vazio28
+    try:
+        r_tv28 = Council(cfg28).run(
+            _Del28("q?", profile=_Prof28(name="tv28", stage1_format="proposal")))
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = orig_e28c, orig_a28c
+
+    check(any(w == "destilacao: deepseek: campo TITULO vazio no bloco PROPOSAL"
+              for w in r_tv28.warnings),
+          f"titulo vazio gera aviso nomeado proprio ({[w for w in r_tv28.warnings if 'destilacao' in w]})")
+    check(len(r_tv28.candidates) == 3
+          and {c["author"] for c in r_tv28.candidates} == {"gpt", "claude", "glm"},
+          f"somente o membro de titulo vazio sai dos candidatos ({len(r_tv28.candidates)})")
+    check(not any("estagio 2 pulado" in w and "3+ candidatos" in w for w in r_tv28.warnings)
+          and len(r_tv28.stage2) == 4,
+          "com 3 destilados o ranking roda por inteiro (nada derruba o run)")
 
     print()
     print()
