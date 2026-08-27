@@ -2054,6 +2054,215 @@ model = "gpt-5.6-sol"
           and len(r_tv28.stage2) == 4,
           "com 3 destilados o ranking roda por inteiro (nada derruba o run)")
 
+    print("29) council cost: ledger e pre-voo")
+    import tempfile as _t29
+    from council import cli as _cli29
+
+    def _uso(p, c):
+        return {"prompt_tokens": p, "completion_tokens": c, "total_tokens": p + c}
+
+    MEMBROS29 = [
+        {"name": "gpt", "provider": "openai", "model": "gpt-5.6-terra"},
+        {"name": "glm", "provider": "zai", "model": "glm-5.3"},
+    ]
+
+    def _registro_final_moderno():
+        return {
+            "members": MEMBROS29,
+            "stage1": [
+                {"name": "gpt", "provider": "openai", "model": "gpt-5.6-terra", "usage": _uso(100, 50)},
+                {"name": "glm", "provider": "zai", "model": "glm-5.3", "usage": _uso(200, 100)},
+            ],
+            "stage2": [
+                {"ranker": "gpt", "usage": _uso(10, 5)},
+                {"ranker": "glm", "usage": _uso(20, 10)},
+            ],
+            "synthesis": {"name": "presidente", "provider": "openai",
+                          "model": "gpt-5.6-sol", "usage": _uso(500, 250)},
+            "usage_by_stage": {"stage1": _uso(300, 150), "stage2": _uso(30, 15),
+                               "synthesis": _uso(500, 250), "total": _uso(830, 415)},
+        }
+
+    def _registro_velho():
+        return {
+            "members": MEMBROS29,
+            "stage1": [
+                {"name": "gpt", "provider": "openai", "model": "gpt-5.6-terra", "usage": _uso(80, 40)},
+            ],
+            "stage2": [
+                {"ranker": "gpt"},  # pre-C2: chamada existiu, tokens nao
+            ],
+            "synthesis": {"name": "presidente", "provider": "openai",
+                          "model": "gpt-5.6-sol", "usage": _uso(400, 200)},
+        }
+
+    def _parcial():
+        return {
+            "members": MEMBROS29,
+            "stage1": [
+                {"name": "glm", "provider": "zai", "model": "glm-5.3", "usage": _uso(50, 25)},
+            ],
+            "stage2": [], "synthesis": {},
+            "partial": True, "stage_reached": "stage1", "interrupted": True,
+            "usage_by_stage": {"stage1": _uso(50, 25), "total": _uso(50, 25)},
+        }
+
+    class _Args29:
+        question = None
+        estimate = False
+        json = True
+        profile = None
+        members = None
+        chairman = None
+        config = None
+
+    def _cost29(args) -> tuple[int, str, str]:
+        bo, be = _io23.StringIO(), _io23.StringIO()
+        with _ctx23.redirect_stdout(bo), _ctx23.redirect_stderr(be):
+            rc = _cli29.cmd_cost(args)
+        return rc, bo.getvalue(), be.getvalue()
+
+    cfg29 = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg29.has_key = lambda p: True
+    orig_load29 = cfgmod.load
+    with _t29.TemporaryDirectory() as td29:
+        d29 = Path(td29) / "runs"
+        d29.mkdir()
+        (d29 / "20260826220000-999-partial.json").write_text(
+            json.dumps(_parcial()), encoding="utf-8")
+        (d29 / "final-moderno.json").write_text(
+            json.dumps(_registro_final_moderno()), encoding="utf-8")
+        (d29 / "velho.json").write_text(json.dumps(_registro_velho()), encoding="utf-8")
+        cfg29.settings.runs_dir = str(d29)
+        cfgmod.load = lambda p=None: cfg29
+
+        # (a) ledger: totais contra soma manual; parcial separado; nota nomeada
+        rc, out, err = _cost29(_Args29())
+        led = json.loads(out)
+        check(rc == 0 and led["registros"] == {"finais": 2, "parciais": 1,
+                                               "antigos_sem_usage_by_stage": 1},
+              f"registros classificados final/parcial/antigo ({led['registros']})")
+        pm = led["por_provedor"]
+        check(pm["openai"]["gpt-5.6-terra"]["final"] ==
+              {"chamadas": 4, "prompt_tokens": 190, "completion_tokens": 95,
+               "total_tokens": 285},
+              f"openai/terra final: 2 respostas + 2 cedulas, cedula velha sem tok ({pm['openai']['gpt-5.6-terra']['final']})")
+        check(pm["zai"]["glm-5.3"]["final"] ==
+              {"chamadas": 2, "prompt_tokens": 220, "completion_tokens": 110,
+               "total_tokens": 330}
+              and pm["zai"]["glm-5.3"]["parcial"] ==
+              {"chamadas": 1, "prompt_tokens": 50, "completion_tokens": 25,
+               "total_tokens": 75},
+              f"zai/glm final e parcial separados ({pm['zai']['glm-5.3']})")
+        check(pm["openai"]["gpt-5.6-sol"]["final"] ==
+              {"chamadas": 2, "prompt_tokens": 900, "completion_tokens": 450,
+               "total_tokens": 1350},
+              f"presidente soma as duas sinteses ({pm['openai']['gpt-5.6-sol']['final']})")
+        check(any("velho.json" in n and "subcontagem" in n for n in led["notas"]),
+              f"registro antigo gera nota nomeada ({led['notas']})")
+
+        a = _Args29(); a.json = False
+        rc, out, err = _cost29(a)
+        check(rc == 0 and "parcial 1 chamadas" in out and "subcontagem" in out,
+              "saida texto traz parcial marcado e nota")
+
+        # (b) estimate com historico: chamadas = aritmetica da config;
+        # tokens = medianas dos registros finais identificadas no output
+        a = _Args29(); a.estimate = True; a.profile = "cont"
+        cfg29.profiles = {"cont": _Prof28(name="cont", chairman_mode="decider")}
+        rc, out, err = _cost29(a)
+        est = json.loads(out)
+        prov_glm = next(m.provider for m in cfg29.members if m.name == "glm")
+        esperado = {}
+        for m in cfg29.members:
+            esperado[m.provider] = esperado.get(m.provider, 0) + 2
+        esperado[cfg29.chairman.provider] = esperado.get(cfg29.chairman.provider, 0) + 1
+        check(rc == 0 and est["perfil"] == "cont"
+              and {p: c["total"] for p, c in est["chamadas_por_provedor"].items()} == esperado,
+              f"chamadas por provedor = aritmetica da config ({est['chamadas_por_provedor']})")
+        check(est["chamadas_por_provedor"][prov_glm]["total"] == 2
+              and est["chamadas_por_provedor"][prov_glm]["synthesis"] == 0,
+              "cota glm deixa de ser prosa: 2 chamadas por questao (resposta + cedula)")
+        check(est["medianas_por_estagio"]["stage1"]["total_tokens"] == 150
+              and est["medianas_por_estagio"]["stage2"]["total_tokens"] == 22.5
+              and est["medianas_por_estagio"]["synthesis"]["total_tokens"] == 675,
+              f"medianas: stage1 150, cedula 22.5, sintese 675 ({est['medianas_por_estagio']})")
+        check(est["tokens_estimados_por_provedor"][prov_glm]["total_tokens"] == 172.5,
+              f"tokens glm = mediana stage1 + mediana cedula ({est['tokens_estimados_por_provedor'][prov_glm]})")
+        check(est["registros_historicos"] == 2,
+              f"medianas so sobre registros finais ({est['registros_historicos']})")
+
+        roster29 = list(cfg29.members)
+        a = _Args29(); a.estimate = True; a.members = "gpt,glm"
+        rc, out, err = _cost29(a)
+        est2 = json.loads(out)
+        check(rc == 0
+              and est2["chamadas_por_provedor"][prov_glm]["stage2"] == 0
+              and est2["chamadas_por_provedor"][prov_glm]["total"] == 1
+              and any("pulado" in s for s in est2["suposicoes"]),
+              f"2 membros: estagio 2 pulado, 1 chamada por provedor ({est2['suposicoes']})")
+        cfg29.members = roster29  # cmd_* muta cfg.members; restaurar para o proximo check
+
+        a = _Args29(); a.estimate = True; a.profile = "nao-existe"
+        rc, out, err = _cost29(a)
+        check(rc == 2 and "nao existe" in err, f"perfil inexistente e erro nomeado ({err.strip()[:50]})")
+
+        # (b2) membro sem chave nao gera chamada fantasma: estimate usa so
+        # ativos, como o engine (cfg.active_members)
+        cfg29.has_key = lambda p: p != "anthropic"
+        a = _Args29(); a.estimate = True
+        rc, out, err = _cost29(a)
+        est3 = json.loads(out)
+        check(rc == 0 and "anthropic" not in est3["chamadas_por_provedor"]
+              and sum(c["total"] for c in est3["chamadas_por_provedor"].values()) == 7,
+              f"membro inativo fora da estimativa ({est3['chamadas_por_provedor']})")
+        cfg29.has_key = lambda p: True
+
+        # (b3) historico ilegivel: nota nomeada, medianas so dos legiveis
+        (d29 / "corrompido.json").write_text("{invalido", encoding="utf-8")
+        a = _Args29(); a.estimate = True
+        rc, out, err = _cost29(a)
+        est4 = json.loads(out)
+        check(rc == 0 and any("corrompido.json" in n and "ilegivel" in n for n in est4["notas"])
+              and est4["registros_historicos"] == 2
+              and est4["medianas_por_estagio"]["stage1"]["total_tokens"] == 150,
+              f"registro ilegivel nomeado, fora das medianas ({est4['notas']})")
+
+        # (b4) zero ativos: engine retorna antes do presidente — estimativa
+        # tambem nao inventa chamada de synthesis
+        cfg29.has_key = lambda p: False
+        a = _Args29(); a.estimate = True
+        rc, out, err = _cost29(a)
+        est5 = json.loads(out)
+        check(rc == 0 and est5["chamadas_por_provedor"] == {}
+              and any("nao chama ninguem" in s for s in est5["suposicoes"])
+              and not any("presidente" in s for s in est5["suposicoes"]),
+              f"sem membros ativos: zero chamadas, sem presidente fantasma "
+              f"({est5['chamadas_por_provedor']}, {est5['suposicoes']})")
+        cfg29.has_key = lambda p: True
+
+        # (c) estimate sem historico: exit proprio, mensagem nomeada, nenhum numero
+        vazio29 = Path(td29) / "vazio"
+        vazio29.mkdir()
+        cfg29.settings.runs_dir = str(vazio29)
+        a = _Args29(); a.estimate = True
+        rc, out, err = _cost29(a)
+        check(rc == 3 and "estimativa impossivel" in err and out == "",
+              f"sem historico: exit 3 nomeado e zero numero no stdout (err: {err.strip()[:60]})")
+
+        # (c2) todo o historico ilegivel: a falha nomeia os arquivos, nao so
+        # a falta de estagio
+        podre29 = Path(td29) / "podre"
+        podre29.mkdir()
+        (podre29 / "so-podre.json").write_text("{quebrado", encoding="utf-8")
+        cfg29.settings.runs_dir = str(podre29)
+        a = _Args29(); a.estimate = True
+        rc, out, err = _cost29(a)
+        check(rc == 3 and "estimativa impossivel" in err and "so-podre.json" in err and out == "",
+              f"historico todo ilegivel: exit 3 nomeando o arquivo ({err.strip()[:80]})")
+
+        cfgmod.load = orig_load29
+
     print()
     print()
     if FALHAS:
