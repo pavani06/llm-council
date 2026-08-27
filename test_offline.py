@@ -2192,6 +2192,7 @@ model = "gpt-5.6-sol"
         check(est["registros_historicos"] == 2,
               f"medianas so sobre registros finais ({est['registros_historicos']})")
 
+        roster29 = list(cfg29.members)
         a = _Args29(); a.estimate = True; a.members = "gpt,glm"
         rc, out, err = _cost29(a)
         est2 = json.loads(out)
@@ -2200,10 +2201,32 @@ model = "gpt-5.6-sol"
               and est2["chamadas_por_provedor"][prov_glm]["total"] == 1
               and any("pulado" in s for s in est2["suposicoes"]),
               f"2 membros: estagio 2 pulado, 1 chamada por provedor ({est2['suposicoes']})")
+        cfg29.members = roster29  # cmd_* muta cfg.members; restaurar para o proximo check
 
         a = _Args29(); a.estimate = True; a.profile = "nao-existe"
         rc, out, err = _cost29(a)
         check(rc == 2 and "nao existe" in err, f"perfil inexistente e erro nomeado ({err.strip()[:50]})")
+
+        # (b2) membro sem chave nao gera chamada fantasma: estimate usa so
+        # ativos, como o engine (cfg.active_members)
+        cfg29.has_key = lambda p: p != "anthropic"
+        a = _Args29(); a.estimate = True
+        rc, out, err = _cost29(a)
+        est3 = json.loads(out)
+        check(rc == 0 and "anthropic" not in est3["chamadas_por_provedor"]
+              and sum(c["total"] for c in est3["chamadas_por_provedor"].values()) == 7,
+              f"membro inativo fora da estimativa ({est3['chamadas_por_provedor']})")
+        cfg29.has_key = lambda p: True
+
+        # (b3) historico ilegivel: nota nomeada, medianas so dos legiveis
+        (d29 / "corrompido.json").write_text("{invalido", encoding="utf-8")
+        a = _Args29(); a.estimate = True
+        rc, out, err = _cost29(a)
+        est4 = json.loads(out)
+        check(rc == 0 and any("corrompido.json" in n and "ilegivel" in n for n in est4["notas"])
+              and est4["registros_historicos"] == 2
+              and est4["medianas_por_estagio"]["stage1"]["total_tokens"] == 150,
+              f"registro ilegivel nomeado, fora das medianas ({est4['notas']})")
 
         # (c) estimate sem historico: exit proprio, mensagem nomeada, nenhum numero
         vazio29 = Path(td29) / "vazio"

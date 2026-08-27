@@ -683,6 +683,8 @@ def cmd_cost(args) -> int:
             print("suposicoes:")
             for s in est["suposicoes"]:
                 print(f"  - {s}")
+            for nota in est["notas"]:
+                print(f"nota: {nota}")
         return 0
 
     led = costmod.ledger(runs_dir)
@@ -697,7 +699,8 @@ def cmd_cost(args) -> int:
                 f, p = pm["final"], pm["parcial"]
                 print(f"  {provider} / {model}: final {f['chamadas']} chamadas, "
                       f"{f['total_tokens']} tok ({f['prompt_tokens']}+{f['completion_tokens']})"
-                      f" · parcial {p['chamadas']} chamadas, {p['total_tokens']} tok")
+                      f" · parcial {p['chamadas']} chamadas, {p['total_tokens']} tok "
+                      f"({p['prompt_tokens']}+{p['completion_tokens']})")
         for nota in led["notas"]:
             print(f"nota: {nota}")
     return 0
@@ -759,7 +762,7 @@ def build_parser() -> argparse.ArgumentParser:
     ag.set_defaults(func=cmd_agreement)
 
     s = sub.add_parser("show", help="mostra um registro salvo")
-    s.add_argument("sha", nargs="?", help="prefixo do sha256 do registro; sem isso, o mais recente")
+    s.add_argument("sha", nargs="?", help="prefixo do sha256; sem isso, o mais recente")
     s.add_argument("--raw", action="store_true", help="JSON cru")
     s.set_defaults(func=cmd_show)
 

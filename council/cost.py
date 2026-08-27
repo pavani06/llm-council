@@ -24,8 +24,12 @@ class SemHistorico(Exception):
 
 
 def _mediana(amostras: list[dict[str, int]]) -> dict[str, int | float]:
-    return {k: statistics.median(a[k] for a in amostras)
-            for k in ("prompt_tokens", "completion_tokens", "total_tokens")}
+    # total e derivado (prompt + completion): medianas independentes poderiam
+    # produzir total != prompt + completion e a soma deixaria de fechar
+    prompt = statistics.median(a["prompt_tokens"] for a in amostras)
+    completion = statistics.median(a["completion_tokens"] for a in amostras)
+    return {"prompt_tokens": prompt, "completion_tokens": completion,
+            "total_tokens": prompt + completion}
 
 
 def ledger(runs_dir: Path) -> dict[str, Any]:
@@ -93,10 +97,10 @@ def ledger(runs_dir: Path) -> dict[str, Any]:
 
 def estimate(cfg: Config, runs_dir: Path, profile: str | None = None) -> dict[str, Any]:
     """Pre-voo da proxima deliberacao: chamadas por provedor derivadas da
-    aritmetica da config; tokens = medianas por estagio dos registros
-    finais. Sem historia para algum estagio da estimativa: SemHistorico —
-    zero numero inventado."""
-    membros = list(cfg.members)
+    aritmetica da config (membros ativos, com chave); tokens = medianas por
+    estagio dos registros finais. Sem historia para algum estagio da
+    estimativa: SemHistorico — zero numero inventado."""
+    membros = cfg.active_members()
     n = len(membros)
     roda_stage2 = n >= 3
 
@@ -115,10 +119,13 @@ def estimate(cfg: Config, runs_dir: Path, profile: str | None = None) -> dict[st
 
     amostras: dict[str, list[dict[str, int]]] = {"stage1": [], "stage2": [], "synthesis": []}
     historicos = 0
+    notas: list[str] = []
     for p in final_runs(runs_dir):
         try:
             rec = json.loads(p.read_text(encoding="utf-8"))
-        except (OSError, UnicodeError, json.JSONDecodeError):
+        except (OSError, UnicodeError, json.JSONDecodeError) as e:
+            notas.append(f"{p.name}: registro ilegivel fora das medianas — "
+                         f"{type(e).__name__}: {e}")
             continue
         historicos += 1
         for e in rec.get("stage1", []):
@@ -168,4 +175,5 @@ def estimate(cfg: Config, runs_dir: Path, profile: str | None = None) -> dict[st
         "medianas_por_estagio": medianas,
         "tokens_estimados_por_provedor": tokens,
         "registros_historicos": historicos,
+        "notas": notas,
     }
