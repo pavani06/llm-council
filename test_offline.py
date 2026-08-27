@@ -2228,6 +2228,17 @@ model = "gpt-5.6-sol"
               and est4["medianas_por_estagio"]["stage1"]["total_tokens"] == 150,
               f"registro ilegivel nomeado, fora das medianas ({est4['notas']})")
 
+        # (b4) zero ativos: engine retorna antes do presidente — estimativa
+        # tambem nao inventa chamada de synthesis
+        cfg29.has_key = lambda p: False
+        a = _Args29(); a.estimate = True
+        rc, out, err = _cost29(a)
+        est5 = json.loads(out)
+        check(rc == 0 and est5["chamadas_por_provedor"] == {}
+              and any("nao chama ninguem" in s for s in est5["suposicoes"]),
+              f"sem membros ativos: zero chamadas, sem presidente fantasma ({est5['chamadas_por_provedor']})")
+        cfg29.has_key = lambda p: True
+
         # (c) estimate sem historico: exit proprio, mensagem nomeada, nenhum numero
         vazio29 = Path(td29) / "vazio"
         vazio29.mkdir()
@@ -2236,6 +2247,17 @@ model = "gpt-5.6-sol"
         rc, out, err = _cost29(a)
         check(rc == 3 and "estimativa impossivel" in err and out == "",
               f"sem historico: exit 3 nomeado e zero numero no stdout (err: {err.strip()[:60]})")
+
+        # (c2) todo o historico ilegivel: a falha nomeia os arquivos, nao so
+        # a falta de estagio
+        podre29 = Path(td29) / "podre"
+        podre29.mkdir()
+        (podre29 / "so-podre.json").write_text("{quebrado", encoding="utf-8")
+        cfg29.settings.runs_dir = str(podre29)
+        a = _Args29(); a.estimate = True
+        rc, out, err = _cost29(a)
+        check(rc == 3 and "estimativa impossivel" in err and "so-podre.json" in err and out == "",
+              f"historico todo ilegivel: exit 3 nomeando o arquivo ({err.strip()[:80]})")
 
         cfgmod.load = orig_load29
 

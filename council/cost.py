@@ -115,7 +115,10 @@ def estimate(cfg: Config, runs_dir: Path, profile: str | None = None) -> dict[st
     if roda_stage2:
         for m in membros:
             add(m.provider, "stage2")
-    add(cfg.chairman.provider, "synthesis")
+    if membros:
+        # sem membros ativos o engine retorna antes do presidente (engine.py:
+        # "nenhum conselheiro com chave configurada") — nada e chamado
+        add(cfg.chairman.provider, "synthesis")
 
     amostras: dict[str, list[dict[str, int]]] = {"stage1": [], "stage2": [], "synthesis": []}
     historicos = 0
@@ -143,7 +146,8 @@ def estimate(cfg: Config, runs_dir: Path, profile: str | None = None) -> dict[st
     if precisos:
         raise SemHistorico(
             f"estagio(s) {', '.join(precisos)} sem nenhuma chamada com usage em "
-            f"{runs_dir} (registros finais: {historicos})")
+            f"{runs_dir} (registros finais: {historicos})"
+            + (f" — {'; '.join(notas)}" if notas else ""))
 
     medianas = {e: _mediana(amo) for e, amo in amostras.items() if amo}
 
@@ -158,7 +162,9 @@ def estimate(cfg: Config, runs_dir: Path, profile: str | None = None) -> dict[st
         tokens[provider] = t
 
     suposicoes = ["todos os membros respondem no estagio 1"]
-    if roda_stage2:
+    if not membros:
+        suposicoes = ["nenhum membro ativo (sem chave): a execucao nao chama ninguem"]
+    elif roda_stage2:
         suposicoes.append(
             f"com {n} membros, cada respondente destila ao menos 1 candidato valido "
             f"e o estagio 2 roda: 1 cedula por respondente (auto-exclusao nao muda o n de chamadas)")
