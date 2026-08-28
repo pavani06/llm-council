@@ -727,11 +727,20 @@ def cmd_cost(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="council", description="Conselho de LLMs com avaliacao cruzada cega.")
+    p = argparse.ArgumentParser(
+        prog="council",
+        description="Conselho de LLMs com avaliacao cruzada cega. "
+                    "Deliberacoes longas: rode desanexado (council ask --help).")
     p.add_argument("--config", help="caminho de um council.toml alternativo")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    a = sub.add_parser("ask", help="faz uma pergunta ao conselho")
+    a = sub.add_parser(
+        "ask", help="faz uma pergunta ao conselho",
+        epilog="deliberacao tipica: 13-15 min (4 membros + ranking + sintese; "
+               "806 s medidos em 28/08/2026). Rode desanexado: "
+               "`setsid nohup council ask ... &` e faca polling de runs/. "
+               "SIGTERM externo salva parcial retomavel com "
+               "`council ask --resume <sha-parcial>`.")
     a.add_argument("question", nargs="?", help="a pergunta (ou stdin)")
     a.add_argument("--members", help="subconjunto por nome, separado por virgula")
     a.add_argument("--chairman", help="usa este conselheiro como presidente")
