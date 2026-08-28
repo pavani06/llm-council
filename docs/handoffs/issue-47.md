@@ -1,5 +1,5 @@
 # Handoff — issue #47 (Tarefa 3: `--rank-lite`)
-PR #<n> · branch issue/47-rank-lite (código em <sha12>) · 2026-08-28
+PR #50 · branch issue/47-rank-lite (código em 0482b67) · 2026-08-28
 
 ## O que mudou no repo
 - `council/engine.py`: campo aditivo `stage2_mode` no `Run` (default `"full"`, ausente
