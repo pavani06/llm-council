@@ -11,7 +11,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from . import config as cfgmod
-from .engine import Council, Interruption, RunInterrupted, finalize_run
+from .engine import Council, Interruption, ResumeError, RunInterrupted, finalize_run, load_partial_for_resume
 from .runs import final_runs
 
 BOLD, DIM, RESET = "\033[1m", "\033[2m", "\033[0m"
@@ -69,21 +69,38 @@ def cmd_ask(args) -> int:
             _err(f"presidente '{args.chairman}' nao esta no conselho configurado")
             return 2
 
-    question = args.question or sys.stdin.read().strip()
-    if not question:
-        _err("pergunta vazia")
+    # resume: exclusivo com --no-rank e com pergunta posicional (o corpo vem
+    # do parcial); stdin nunca e lido neste modo
+    if args.resume and (args.no_rank or args.question):
+        _err("resume_invalid_args: --resume e exclusivo com --no-rank e com pergunta posicional")
         return 2
+    if args.resume:
+        question = None
+    else:
+        question = args.question or sys.stdin.read().strip()
+        if not question:
+            _err("pergunta vazia")
+            return 2
 
     runs_dir = Path(cfg.settings.runs_dir)
     if not runs_dir.is_absolute():
         runs_dir = cfg.source.parent / runs_dir
+
+    resume_from = None
+    if args.resume:
+        try:
+            resume_from = load_partial_for_resume(runs_dir, args.resume, cfg)
+        except ResumeError as e:
+            _err(str(e))
+            return 2
 
     council = Council(cfg, progress=None if args.quiet else _progress)
     interrupcao = Interruption()
     try:
         with _sinais_armados(interrupcao):
             rec = council.run(question, skip_ranking=args.no_rank,
-                              runs_dir=runs_dir, interruption=interrupcao)
+                              runs_dir=runs_dir, interruption=interrupcao,
+                              resume_from=resume_from)
     except RunInterrupted as e:
         _err(f"interrompido: {e} (o que ja foi pago esta no parcial)")
         return 130
@@ -719,6 +736,8 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--members", help="subconjunto por nome, separado por virgula")
     a.add_argument("--chairman", help="usa este conselheiro como presidente")
     a.add_argument("--no-rank", action="store_true", help="pula o estagio 2 (mais barato e rapido)")
+    a.add_argument("--resume", metavar="SHA_PARCIAL",
+                   help="retoma um parcial (sha256 ou prefixo unico) e roda so a sintese")
     a.add_argument("--json", action="store_true", help="registro completo em JSON no stdout")
     a.add_argument("--quiet", action="store_true", help="so a resposta final")
     a.set_defaults(func=cmd_ask)
