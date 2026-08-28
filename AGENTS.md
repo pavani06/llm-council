@@ -99,6 +99,10 @@ arquivo ANTES do plano.
   registro, custo por estágio, `decision_aliases`, destilação de `proposal`,
   `council cost`), com relatório final na issue #35 e handoffs
   `docs/handoffs/issue-30..34.md`.
+- Épico concluído: #47 (resiliência do CLI — `--resume` de parcial por composição,
+  help/README de execução desanexada, `--rank-lite`, auditor classificado em dois
+  blocos), com Emenda 2 selada antes do piloto e handoff em
+  `docs/handoffs/issue-47.md`.
 - **Fase 2 e o selo**: o contrato do experimento 1-vs-N está congelado em
   `docs/prereg/2026-08-27-experimento-1vsN.md` (tag `prereg-1vsN`). O schema do
   registro está congelado para o experimento: qualquer mudança antes do seu fim
