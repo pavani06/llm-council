@@ -2473,6 +2473,20 @@ model = "gpt-5.6-sol"
               and any(p.name.endswith(_runs30.PARTIAL_SUFFIX) for p in finais30),
               "CLI deixa o parcial e grava o final")
 
+    print("31) help do ask e README: execucao desanexada documentada")
+    from council import cli as _cli31
+    sub31 = next(act for act in _cli31.build_parser()._actions if act.dest == "cmd")
+    help31 = sub31.choices["ask"].format_help()
+    check("13-15 min" in help31 and "setsid nohup" in help31 and "--resume" in help31,
+          "council ask --help mostra duracao, padrao desanexado e --resume")
+    check("desanexado" in _cli31.build_parser().format_help(),
+          "parser de topo aponta para execucao desanexada")
+    readme31 = (Path(__file__).parent / "README.md").read_text(encoding="utf-8")
+    check("Executando deliberações longas" in readme31
+          and "setsid nohup" in readme31 and "--resume" in readme31
+          and "sessao-fase2" in readme31,
+          "README documenta duracao, as 2 falhas registradas e a recuperacao de parciais")
+
     print()
     print()
     if FALHAS:

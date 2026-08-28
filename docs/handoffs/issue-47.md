@@ -1,35 +1,32 @@
-# Handoff — issue #47 (Tarefa 1: `--resume`)
-PR #48 · branch issue/47-resume-sintese (código em d1384c1) · 2026-08-28
+# Handoff — issue #47 (Tarefa 2: help e README desanexados)
+PR #<n> · branch issue/47-help-readme (código em <sha12>) · 2026-08-28
 
 ## O que mudou no repo
-- `council/cli.py`: `ask --resume SHA_PARCIAL`; exclusivo com `--no-rank`/pergunta
-  (`resume_invalid_args`, exit 2); stdin nunca lido no modo resume.
-- `council/engine.py`: `load_partial_for_resume()` com guardas fail-closed nomeados
-  (`partial_not_found` c/ prefixo ambíguo, `not_partial`, `stage2_incomplete`,
-  `config_drift`) via `ResumeError`, nada gravado; `_herdar_estagios()` copia estágios
-  1-2 verbatim e RECOMPUTA consenso pela borda (sem rede); campo aditivo `resumed_from`
-  no `Run` (Emenda 2 selada 28/08, master `3ddb236`); cegamento recriado pelo mesmo scrub.
-- `council/runs.py`: `partial_path(..., resumed=False)` — rastro do resume com sufixo `-r`.
-- `test_offline.py`: seção 30, +30 checks (423 total, exit 0); golden byte a byte.
+- `council/cli.py`: epilog no subparser `ask` (duração 13-15 min medida em 28/08, 806 s
+  no `d1adb36e046a`; padrão `setsid nohup` + polling de `runs/`; SIGTERM salva parcial
+  retomável com `--resume`) e nota na descrição do parser de topo. Zero comportamento.
+- `README.md`: seção "Executando deliberações longas" dentro de `## Uso` — padrão
+  desanexado, as 2 ocorrências do modo de falha (r2 do grill em
+  `docs/grill/sessao-fase2.md`; 28/08 com o parcial `483189`) e recuperação via
+  `council show` + `--resume`.
+- `test_offline.py`: seção 31, +3 checks (426 total, exit 0); golden byte a byte.
+- Estado anterior: Tarefa 1 (`--resume`) merged em `a0e6284` (PR #48); Emenda 2 selada.
 
 ## Decisões tomadas em voo (fora do plano)
-- **Sufixo `-r`**: colisão real no teste — resume no mesmo segundo/processo (mesmo pid)
-  sobrescrevia o parcial referenciado no "seal" e o apagava no finalize. O nome do
-  rastro deriva de `resumed_from` (setado antes do 1º checkpoint): escrita e remoção
-  condicionais ao flag — a "condição" que a issue previa.
-- **`members` copiado verbatim** (fora da lista): os estágios herdados pertencem àquele
-  roster. Re-scrub determinístico: config igual (guarda) → mesmo cegamento.
+- Seção do README como subseção de `## Uso` (é sobre rodar `ask`), não seção de topo.
+- CLI sem acentos (padrão do código); README com acentos (padrão do arquivo).
+- Duração citada com a medição real (806 s, `d1adb36e046a`), não número redondo.
 
 ## Pegadinhas descobertas
-- `settings.runs_dir` entra no `config_sha256`: mudá-lo entre selo e resume é drift.
-- `stage_reached == "synthesis"` é retomável e RE-RODA a síntese (gasto, não corrupção).
-- Prefixo ambíguo falha como `partial_not_found` com mensagem própria.
+- `add_parser(..., epilog=...)` com formatter default faz wrap sozinho — texto corrido
+  funciona; o teste via `format_help()` cobre o texto mesmo embrulhado.
 
 ## O que a próxima issue precisa saber
-- Tarefa 3: `stage2_mode` já coberto pela Emenda 2; leitura retroativa testada.
-- Ledger/`final_runs()` já classificam `-r-partial.json` como parcial (sufixo comum).
-- `usage_by_stage.total` do resume = herdado + síntese fresca (soma exata, testado).
+- Tarefa 3 (`--rank-lite`): `stage2_mode` já coberto pela Emenda 2 (selada); erros
+  nomeados seguem a convenção de código + `ResumeError` estabelecida na Tarefa 1.
+- O epilog do `ask` cita `--resume`: se T3 citar flags no epilog, lembrar que
+  `--rank-lite` é incompatível com `--resume` e `--no-rank`.
 
 ## Pendências deixadas
-- Parcial de `deliberate` (perfil) via `ask`: herda estágios, sintetiza em synthesizer.
-- Varredura de parciais órfãos (inclui `-r`) continua inexistente (pendência da C1).
+- Estimativa de duração/custo melhorada segue issue separada (fora de escopo aqui).
+- Push da Emenda 2 (`f0e6af5`) ao `origin/master` pendente de ordem do operador.

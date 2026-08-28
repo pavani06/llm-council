@@ -166,6 +166,31 @@ salva só a resposta.
 ./bin/council show                    # último registro salvo
 ```
 
+### Executando deliberações longas
+
+Uma deliberação completa (4 membros + ranking + síntese) leva **13-15 min** — 806 s
+medidos em 28/08/2026, registro `d1adb36e046a`. Rode desanexada e faça polling:
+
+```bash
+setsid nohup ./bin/council ask "pergunta longa" > resposta.md 2> ask.log &
+ls -t runs/ | head   # <stamp>-<sha12>.json quando termina;
+                     # <stamp>-<pid>-partial.json se morreu no meio
+```
+
+O modo de falha "timeout de processo" já ocorreu duas vezes registradas: na r2 do
+grill (`docs/grill/sessao-fase2.md`) e em 28/08/2026, quando um SIGTERM externo matou
+o run com o estágio 2 já completo (`483189` — 199 mil tokens pagos sem resultado). O
+que foi pago até o último estágio sobrevive no parcial, e a síntese é retomável sem
+reexecutar nada:
+
+```bash
+./bin/council show <sha>             # inspeciona o parcial (marcado partial=true)
+./bin/council ask --resume <sha>     # reusa estágios 1-2 e roda só a síntese
+```
+
+O resume produz um registro **novo** que referencia o parcial pelo sha256 — o parcial
+fica em `runs/`, e o custo herdado entra no `usage_by_stage` do novo registro.
+
 ### Deliberação com perfil
 
 Além de perguntar, o conselho delibera: conselheiros com papéis, um bundle de
