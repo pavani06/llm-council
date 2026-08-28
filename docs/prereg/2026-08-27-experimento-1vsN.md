@@ -149,6 +149,13 @@ pré-registro que emenda), motivo e ato nomeado do operador.
   Texto integral: `docs/prereg/2026-08-28-emenda-1.md`.
 - Ato do operador: 28/08 14:51 — "aprovo e cole a entrada".
 
+### Emenda 2 — Campos aditivos de resiliência do CLI no `Run` (28/08/2026)
+
+- Texto-base: `docs/prereg/2026-08-27-experimento-1vsN.md` na tag `prereg-1vsN` (8b82214), com a Emenda 1 incorporada.
+- Motivo: plano de resiliência do CLI (Momus OKAY 28/08) introduz `resumed_from` (retomada de parcial por composição) e `stage2_mode` (estágio 2 lite), aditivos, antes do piloto.
+- Ato do operador: 28/08 16:01 — "auorizo".
+- Texto integral: `docs/prereg/2026-08-28-emenda-2.md`.
+
 ---
 
 ## Apêndice A — Decisão do operador sobre a dissidência `e099e70` (verbatim, 27/08 6:20)
