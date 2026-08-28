@@ -1,5 +1,5 @@
 # Handoff — issue #47 (Tarefa 2: help e README desanexados)
-PR #<n> · branch issue/47-help-readme (código em <sha12>) · 2026-08-28
+PR #49 · branch issue/47-help-readme (código em 56cb62f) · 2026-08-28
 
 ## O que mudou no repo
 - `council/cli.py`: epilog no subparser `ask` (duração 13-15 min medida em 28/08, 806 s
