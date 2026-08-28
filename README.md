@@ -162,6 +162,7 @@ salva só a resposta.
 ```bash
 ./bin/council ask "..." --json        # registro completo
 ./bin/council ask "..." --no-rank     # pula o estágio 2 (mais barato)
+./bin/council ask "..." --rank-lite   # estágio 2 lite: metade dos avaliadores (mín. 2)
 ./bin/council ask "..." --members gpt,glm
 ./bin/council show                    # último registro salvo
 ```
@@ -227,6 +228,11 @@ parafraseia, e "palavra longa ausente" sinalizava 185 de 188 termos em teste con
 reais — puro ruído. Calibrado, fica em ~2% das frases, e o que sobra são identificadores de verdade.
 E **acréscimo nem sempre é falha:** o próprio prompt do presidente manda corrigir o conselho quando
 ele erra em bloco. O comando mostra o que ele pôs por conta própria; quem julga é você.
+
+A saída separa o que ele pôs em dois blocos, classificando cada termo pela **forma** (sem julgar
+verdade): **acréscimos estruturais prováveis** — snake_case, dotted path, hex, número, sigla com
+dígito, padrões tipo `N-vs-1`, ou seja, nomeação própria do presidente — e **acréscimos a
+verificar** — termo em prosa, possível alegação factual que merece sua conferência.
 
 ### Julgamento cego seu
 
