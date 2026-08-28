@@ -1,5 +1,5 @@
 # Handoff — issue #47 (Tarefa 1: `--resume`)
-PR #<n> · branch issue/47-resume-sintese (código em <sha12>) · 2026-08-28
+PR #48 · branch issue/47-resume-sintese (código em d1384c1) · 2026-08-28
 
 ## O que mudou no repo
 - `council/cli.py`: opção `--resume SHA_PARCIAL` no `ask`; exclusiva com `--no-rank` e
