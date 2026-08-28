@@ -74,6 +74,9 @@ def cmd_ask(args) -> int:
     if args.resume and (args.no_rank or args.question):
         _err("resume_invalid_args: --resume e exclusivo com --no-rank e com pergunta posicional")
         return 2
+    if getattr(args, "rank_lite", False) and (args.no_rank or args.resume):
+        _err("rank_lite_invalid_args: --rank-lite e exclusivo com --no-rank e com --resume")
+        return 2
     if args.resume:
         question = None
     else:
@@ -100,7 +103,8 @@ def cmd_ask(args) -> int:
         with _sinais_armados(interrupcao):
             rec = council.run(question, skip_ranking=args.no_rank,
                               runs_dir=runs_dir, interruption=interrupcao,
-                              resume_from=resume_from)
+                              resume_from=resume_from,
+                              rank_lite=getattr(args, "rank_lite", False))
     except RunInterrupted as e:
         _err(f"interrompido: {e} (o que ja foi pago esta no parcial)")
         return 130
@@ -747,6 +751,8 @@ def build_parser() -> argparse.ArgumentParser:
     a.add_argument("--no-rank", action="store_true", help="pula o estagio 2 (mais barato e rapido)")
     a.add_argument("--resume", metavar="SHA_PARCIAL",
                    help="retoma um parcial (sha256 ou prefixo unico) e roda so a sintese")
+    a.add_argument("--rank-lite", dest="rank_lite", action="store_true",
+                   help="estagio 2 orcavel: metade dos avaliadores (min 2), na ordem da config")
     a.add_argument("--json", action="store_true", help="registro completo em JSON no stdout")
     a.add_argument("--quiet", action="store_true", help="so a resposta final")
     a.set_defaults(func=cmd_ask)

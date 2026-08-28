@@ -2487,6 +2487,100 @@ model = "gpt-5.6-sol"
           and "sessao-fase2" in readme31,
           "README documenta duracao, as 2 falhas registradas e a recuperacao de parciais")
 
+    print("32) rank-lite: estagio 2 orcavel")
+    import contextlib as _ctx32
+    import io as _io32
+    import tempfile as _t32
+    from dataclasses import asdict as _asdict32
+    from council import cli as _cli32
+    from council import engine as _eng32
+    from council.engine import Interruption as _Int32
+    from council.engine import ResumeError as _RE32
+    from council.engine import RunInterrupted as _RI32
+
+    cfg32 = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg32.has_key = lambda p: True
+    cfg32.settings.seed = 13
+
+    # (a) campo aditivo: default "full", serializa, registro antigo le igual
+    rec32v = _eng32.Run(question="q", seed=1, started_at="x", config_source="y")
+    check(_asdict32(rec32v)["stage2_mode"] == "full", "stage2_mode default full e serializa")
+    velho32 = {k: v for k, v in _asdict32(rec32v).items() if k != "stage2_mode"}
+    check(_eng32.Run(**velho32).stage2_mode == "full",
+          "registro antigo sem o campo le como full (leitura retroativa)")
+
+    # (b) flag ligada: 2 ballots + lite + warning; desligada: 4/4 + full
+    # (patch local do fake_chat: o global desde a secao 9 e o wrapper que
+    # derruba o glm — aqui os 4 membros tem de responder)
+    with _t32.TemporaryDirectory() as td32:
+        d32 = Path(td32) / "runs"
+        orig32g, orig32ga = Endpoint.chat, AnthropicEndpoint.chat
+        Endpoint.chat, AnthropicEndpoint.chat = fake_chat, fake_chat
+        try:
+            rec_lite32 = Council(cfg32).run("pergunta lite?", runs_dir=d32, rank_lite=True)
+            check(len(rec_lite32.stage2) == 2,
+                  f"lite roda com exatamente 2 ballots (foi {len(rec_lite32.stage2)})")
+            check(rec_lite32.stage2_mode == "lite", "stage2_mode = lite no registro")
+            check(any("modo lite" in w and "2/4" in w for w in rec_lite32.warnings),
+                  f"warning nomeia n/m ({[w for w in rec_lite32.warnings if 'lite' in w]})")
+            check(len(rec_lite32.stage1) == 4 and rec_lite32.synthesis.get("ok"),
+                  "estagio 1 (4 respostas) e sintese normais no lite")
+            rec_full32 = Council(cfg32).run("pergunta full?", runs_dir=d32)
+            check(len(rec_full32.stage2) == 4 and rec_full32.stage2_mode == "full",
+                  "sem a flag: 4/4 ballots e full (comportamento identico ao atual)")
+        finally:
+            Endpoint.chat, AnthropicEndpoint.chat = orig32g, orig32ga
+
+        # (c) parcial lite sob o guarda da Tarefa 1: fail-closed, reexecuta integral
+        d32b = Path(td32) / "lite-parcial"
+        flag32 = _Int32()
+
+        def chat_l32(self, model, messages, **kw):
+            if "FINAL RANKING" in messages[0]["content"]:
+                flag32.request("sinal SIGTERM recebido")
+            return fake_chat(self, model, messages, **kw)
+
+        orig32, orig32a = Endpoint.chat, AnthropicEndpoint.chat
+        Endpoint.chat, AnthropicEndpoint.chat = chat_l32, chat_l32
+        try:
+            Council(cfg32).run("pergunta lite interrompida?", runs_dir=d32b,
+                               interruption=flag32, rank_lite=True)
+            raise AssertionError("deveria interromper no estagio 2")
+        except _RI32:
+            pass
+        finally:
+            Endpoint.chat, AnthropicEndpoint.chat = orig32, orig32a
+        pay_l32 = json.loads(next(d32b.glob("*-partial.json")).read_text(encoding="utf-8"))
+        check(pay_l32["stage2_mode"] == "lite" and len(pay_l32["stage2"]) == 2,
+              "parcial lite carrega stage2_mode e 2 cedulas")
+        try:
+            _eng32.load_partial_for_resume(d32b, pay_l32["sha256"][:8], cfg32)
+            check(False, "parcial lite levanta stage2_incomplete")
+        except _RE32 as e32:
+            check(e32.code == "stage2_incomplete",
+                  f"parcial lite fail-closed no resume ({e32})")
+
+    # (d) args: rank_lite_invalid_args; flag sozinha parseia
+    def _ask32(**kw32):
+        a32 = type("A32", (), {
+            "config": None, "members": None, "chairman": None,
+            "question": None, "no_rank": False, "json": False,
+            "quiet": False, "resume": None, "rank_lite": False,
+        })()
+        for k32, v32 in kw32.items():
+            setattr(a32, k32, v32)
+        return a32
+
+    for kwargs32 in ({"rank_lite": True, "no_rank": True},
+                     {"rank_lite": True, "resume": "abcdef0"}):
+        err32 = _io32.StringIO()
+        with _ctx32.redirect_stderr(err32):
+            rc32 = _cli32.cmd_ask(_ask32(**kwargs32))
+        check(rc32 == 2 and "rank_lite_invalid_args" in err32.getvalue(),
+              f"rank_lite_invalid_args, rc=2 ({kwargs32})")
+    check(_cli32.build_parser().parse_args(["ask", "--rank-lite", "pergunta"]).rank_lite
+          is True, "--rank-lite sozinho parseia")
+
     print()
     print()
     if FALHAS:
