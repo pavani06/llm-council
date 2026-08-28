@@ -1,32 +1,33 @@
-# Handoff — issue #47 (Tarefa 2: help e README desanexados)
-PR #49 · branch issue/47-help-readme (código em 56cb62f) · 2026-08-28
+# Handoff — issue #47 (Tarefa 3: `--rank-lite`)
+PR #50 · branch issue/47-rank-lite (código em 0482b67) · 2026-08-28
 
 ## O que mudou no repo
-- `council/cli.py`: epilog no subparser `ask` (duração 13-15 min medida em 28/08, 806 s
-  no `d1adb36e046a`; padrão `setsid nohup` + polling de `runs/`; SIGTERM salva parcial
-  retomável com `--resume`) e nota na descrição do parser de topo. Zero comportamento.
-- `README.md`: seção "Executando deliberações longas" dentro de `## Uso` — padrão
-  desanexado, as 2 ocorrências do modo de falha (r2 do grill em
-  `docs/grill/sessao-fase2.md`; 28/08 com o parcial `483189`) e recuperação via
-  `council show` + `--resume`.
-- `test_offline.py`: seção 31, +3 checks (426 total, exit 0); golden byte a byte.
-- Estado anterior: Tarefa 1 (`--resume`) merged em `a0e6284` (PR #48); Emenda 2 selada.
+- `council/engine.py`: campo aditivo `stage2_mode` no `Run` (default `"full"`, ausente
+  em registro antigo = `"full"` — Emenda 2 selada); `stage2(lite=False)` seleciona os
+  primeiros `max(2, len(answerers)//2)` avaliadores NA ORDEM DA CONFIG; `run(rank_lite=)`
+  seta `stage2_mode="lite"` + warning "estágio 2 em modo lite (deliberação não plena):
+  <n>/<m> avaliadores". Sem a flag, byte-idêntico ao atual.
+- `council/cli.py`: `ask --rank-lite`; exclusivo com `--no-rank` e `--resume`
+  (`rank_lite_invalid_args`, exit 2, nada gravado).
+- `test_offline.py`: seção 32, +12 checks (438 total, exit 0); golden byte a byte.
+- Estado anterior: T1 (`a0e6284`) e T2 (`51e1936`) merged; Emenda 2 pushed (`9eab0df`).
 
 ## Decisões tomadas em voo (fora do plano)
-- Seção do README como subseção de `## Uso` (é sobre rodar `ask`), não seção de topo.
-- CLI sem acentos (padrão do código); README com acentos (padrão do arquivo).
-- Duração citada com a medição real (806 s, `d1adb36e046a`), não número redondo.
+- Parcial lite sob o guarda da Tarefa 1 → `stage2_incomplete` (2/4 cédulas): resume de
+  parcial lite segue fail-closed e manda reexecutar integral — estendê-lo é issue
+  futura; teste prova o fail-closed.
+- Warning usa n = cédulas geradas, m = respondentes elegíveis do estágio 1.
 
 ## Pegadinhas descobertas
-- `add_parser(..., epilog=...)` com formatter default faz wrap sozinho — texto corrido
-  funciona; o teste via `format_help()` cobre o texto mesmo embrulhado.
+- O chat global da suíte, desde a seção 9, é o wrapper que derruba o glm (429) e ele
+  NUNCA é restaurado — seções novas que rodem `ask` completo precisam patchar o
+  `fake_chat` localmente (seção 32(b) faz isso), senão respondem 3/4 em silêncio.
 
 ## O que a próxima issue precisa saber
-- Tarefa 3 (`--rank-lite`): `stage2_mode` já coberto pela Emenda 2 (selada); erros
-  nomeados seguem a convenção de código + `ResumeError` estabelecida na Tarefa 1.
-- O epilog do `ask` cita `--resume`: se T3 citar flags no epilog, lembrar que
-  `--rank-lite` é incompatível com `--resume` e `--no-rank`.
+- Tarefa 4 (auditor classificado): não toca engine; `stage2_mode` e `resumed_from` são
+  os únicos campos novos do `Run` (Emenda 2 fecha o schema desta fase).
+- O epilog do `ask` (T2) ainda não cita `--rank-lite`; se a issue quiser, é 1 linha.
 
 ## Pendências deixadas
-- Estimativa de duração/custo melhorada segue issue separada (fora de escopo aqui).
-- Push da Emenda 2 (`f0e6af5`) ao `origin/master` pendente de ordem do operador.
+- Resume de parcial lite (extensão futura, fora do escopo declarado).
+- Epilog sem menção ao `--rank-lite` (só citado em `--help` da opção).

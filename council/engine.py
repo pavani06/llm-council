@@ -137,6 +137,9 @@ class Run:
     # retomada de parcial (aditivo, Emenda 2: None ou ausente = execucao
     # integral; presente = sha256 do parcial que originou este registro)
     resumed_from: str | None = None
+    # estagio 2 (aditivo, Emenda 2: "full" | "lite"; registro antigo sem o
+    # campo le como "full" — deliberação plena, leitura retroativa)
+    stage2_mode: str = "full"
 
     def digest(self) -> str:
         blob = json.dumps(asdict(self), sort_keys=True, ensure_ascii=False).encode()
@@ -296,12 +299,17 @@ class Council:
     def stage2(
         self, question: str, candidates: list[Candidate], members: list[Member], seed: int,
         criteria=DEFAULT_CRITERIA, answerers: set[str] | None = None,
+        lite: bool = False,
     ) -> list[Ballot]:
         # avaliadores = quem respondeu no estagio 1; autor de candidato e papel
         # no ranking, nao requisito para avaliar (desacoplamento de papeis).
         if answerers is None:
             answerers = {c.author for c in candidates}
         rankers = [m for m in members if m.name in answerers]
+        if lite:
+            # modo orcavel: primeiros max(2, metade) na ORDEM DA CONFIG —
+            # deterministico, sem escolha por modelo
+            rankers = rankers[:max(2, len(answerers) // 2)]
         self.progress("stage2", f"{len(rankers)} avaliadores, cegos e sem auto-avaliacao")
         with ThreadPoolExecutor(max_workers=max(1, len(rankers))) as pool:
             return list(
@@ -402,7 +410,8 @@ class Council:
     def run(self, question: str | Deliberation | None = None, *, skip_ranking: bool = False,
             runs_dir: Path | None = None,
             interruption: Interruption | None = None,
-            resume_from: tuple[Run, str] | None = None) -> Run:
+            resume_from: tuple[Run, str] | None = None,
+            rank_lite: bool = False) -> Run:
         if resume_from is None and not isinstance(question, (str, Deliberation)):
             raise ValueError("run(): passe a pergunta (str ou Deliberation) ou resume_from")
         s = self.cfg.settings
@@ -518,7 +527,13 @@ class Council:
                 criteria = (spec.profile.criteria if spec.profile and spec.profile.criteria
                             else DEFAULT_CRITERIA)
                 ballots = self.stage2(question, candidates, members, seed, criteria,
-                                      answerers=set(answers))
+                                      answerers=set(answers), lite=rank_lite)
+                if rank_lite:
+                    rec.stage2_mode = "lite"
+                    rec.warnings.append(
+                        f"estágio 2 em modo lite (deliberação não plena): "
+                        f"{len(ballots)}/{len(set(answers))} avaliadores"
+                    )
                 rec.stage2 = [
                     {
                         "ranker": b.ranker,
