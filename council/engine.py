@@ -8,14 +8,14 @@ import os
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass, field, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from .config import Config, Member
 from .prompts import DEFAULT_CRITERIA, chairman_prompt, ranking_prompt, stage1_user_prompt
-from .provenance import seal
+from .provenance import config_digest, seal
 from .providers import Reply
 from .runs import partial_path, stamp_for
 from .structured import parse_decision, parse_proposal, parse_questions
@@ -134,6 +134,9 @@ class Run:
     # rotulo cego -> id real (aditivo, {} sem decider cego): resolve o
     # "Candidato B" do texto do presidente sem reconstruir a ordem do consenso
     decision_aliases: dict[str, str] = field(default_factory=dict)
+    # retomada de parcial (aditivo, Emenda 2: None ou ausente = execucao
+    # integral; presente = sha256 do parcial que originou este registro)
+    resumed_from: str | None = None
 
     def digest(self) -> str:
         blob = json.dumps(asdict(self), sort_keys=True, ensure_ascii=False).encode()
@@ -171,6 +174,19 @@ class RunInterrupted(Exception):
         self.path = path
         self.stage = stage
         self.reason = reason
+
+
+class ResumeError(Exception):
+    """Guarda de retomada falhou: fail-closed, erro nomeado, nada gravado.
+
+    O codigo (partial_not_found, not_partial, stage2_incomplete, config_drift,
+    resume_invalid_args) e a interface: o CLI imprime o codigo e sai
+    nao-zero sem escrever arquivo algum.
+    """
+
+    def __init__(self, code: str, msg: str):
+        super().__init__(f"{code}: {msg}")
+        self.code = code
 
 
 class Council:
@@ -337,6 +353,39 @@ class Council:
 
     # ------------------------------------------------------------- run
 
+    def _herdar_estagios(self, rec: Run, par: Run,
+                         par_sha: str) -> tuple[dict[str, str], dict[str, str],
+                                                list[Candidate], list]:
+        """Retomada: estagios 1-2 do parcial entram verbatim no registro novo.
+
+        O consenso NAO e copiado: e recomputado pela borda a partir dos ballots
+        herdados — deterministico e sem rede, o mesmo resultado de sempre. O
+        cegamento da sintese e reconstituido pela mesma funcao de scrub (a
+        config e idêntica, garantida pelo guarda config_drift, logo os termos
+        tambem sao — o resultado e o mesmo cegamento da execucao original).
+        """
+        rec.members = [dict(m) for m in par.members]
+        rec.stage1 = [dict(e) for e in par.stage1]
+        rec.stage2 = [dict(e) for e in par.stage2]
+        rec.candidates = [dict(c) for c in par.candidates]
+        if par.decision is not None:
+            rec.decision = dict(par.decision)
+        answers = {e["name"]: e["content"] for e in rec.stage1 if e.get("ok")}
+        blind_answers = dict(answers)
+        s = self.cfg.settings
+        if s.scrub_identity and answers:
+            terms = identity_terms(self.cfg.active_members(), s.identity_terms)
+            for name, txt in answers.items():
+                blind_answers[name], _ = scrub_identity(txt, terms, rec.question)
+        candidates = [Candidate(id=c["id"], text=c["text"], author=c["author"])
+                      for c in par.candidates]
+        ballots = [_ballot_do_registro(b) for b in par.stage2]
+        consensus = borda(ballots, [c.id for c in candidates])
+        rec.consensus = [asdict(c) for c in consensus]
+        rec.divided = divided(consensus)
+        rec.warnings.append(f"estágios 1-2 herdados de {par_sha[:12]}")
+        return answers, blind_answers, candidates, consensus
+
     def _checkpoint(self, rec: Run, stage: str, runs_dir: Path | None,
                     interruption: Interruption | None, t0: float) -> None:
         """Limite de estagio: grava o parcial e, se um sinal chegou, para aqui."""
@@ -350,14 +399,24 @@ class Council:
         if parando:
             raise RunInterrupted(rec, path, stage, interruption.reason)
 
-    def run(self, question: str | Deliberation, *, skip_ranking: bool = False,
+    def run(self, question: str | Deliberation | None = None, *, skip_ranking: bool = False,
             runs_dir: Path | None = None,
-            interruption: Interruption | None = None) -> Run:
-        spec = question if isinstance(question, Deliberation) else Deliberation(question)
-        question = spec.question  # corpo existente segue lendo 'question'
+            interruption: Interruption | None = None,
+            resume_from: tuple[Run, str] | None = None) -> Run:
+        if resume_from is None and not isinstance(question, (str, Deliberation)):
+            raise ValueError("run(): passe a pergunta (str ou Deliberation) ou resume_from")
         s = self.cfg.settings
-        seed = s.seed or random.SystemRandom().randrange(1, 2**31)
         t0 = time.monotonic()
+        par: Run | None = None
+        par_sha = ""
+        if resume_from is not None:
+            par, par_sha = resume_from
+            spec = Deliberation(par.question)
+            seed = par.seed  # herdado verbatim: o consenso recomputado depende dele
+        else:
+            spec = question if isinstance(question, Deliberation) else Deliberation(question)
+            seed = s.seed or random.SystemRandom().randrange(1, 2**31)
+        question = spec.question  # corpo existente segue lendo 'question'
         rec = Run(
             question=spec.question,
             seed=seed,
@@ -381,105 +440,118 @@ class Council:
         rec.run_refs = list(spec.run_refs)
         if spec.bundle is not None:
             rec.bundle_sha256 = hashlib.sha256(spec.bundle.encode("utf-8")).hexdigest()
+        if resume_from is not None:
+            # antes do 1o checkpoint: o rastro propio do resume ja nasce com o
+            # sufixo -r e nunca colide com o parcial referenciado
+            rec.resumed_from = par_sha
         self._checkpoint(rec, "seal", runs_dir, interruption, t0)
 
-        members = self.cfg.active_members()
-        skipped = [m for m in self.cfg.members if m not in members]
-        for m in skipped:
-            rec.warnings.append(
-                f"{m.name} fora do conselho: {self.cfg.key_env_for(m.provider)} nao definida"
-            )
-        if not members:
-            rec.warnings.append("nenhum conselheiro com chave configurada")
-            rec.usage_by_stage = _usage_by_stage(rec)
-            rec.elapsed_s = time.monotonic() - t0
-            return rec
-        rec.members = [{"name": m.name, "provider": m.provider, "model": m.model} for m in members]
+        # retomada: estagios 1-2 do parcial entram verbatim, consenso e
+        # recomputado dos ballots herdados (borda deterministica, sem rede) e
+        # o fluxo salta direto para o estagio 3, que e o bloco unico de sempre
+        if resume_from is not None:
+            answers, blind_answers, candidates, consensus = (
+                self._herdar_estagios(rec, par, par_sha))
+            self._checkpoint(rec, "stage2", runs_dir, interruption, t0)
 
-        # estagio 1
-        answers_all = self.stage1(spec, members)
-        rec.stage1 = [
-            {"name": a.name, "provider": a.provider, "model": a.model, **a.reply.as_dict()}
-            for a in answers_all
-        ]
-        answers = {a.name: a.reply.content for a in answers_all if a.ok}
-        for a in answers_all:
-            if not a.ok:
-                rec.warnings.append(f"estagio 1: {a.name} falhou — {a.reply.error}")
-            elif a.reply.truncated:
+        if resume_from is None:
+            members = self.cfg.active_members()
+            skipped = [m for m in self.cfg.members if m not in members]
+            for m in skipped:
                 rec.warnings.append(
-                    f"estagio 1: resposta de {a.name} truncada por max_tokens — aumente o teto dele em [params]"
+                    f"{m.name} fora do conselho: {self.cfg.key_env_for(m.provider)} nao definida"
                 )
-        self._checkpoint(rec, "stage1", runs_dir, interruption, t0)
+            if not members:
+                rec.warnings.append("nenhum conselheiro com chave configurada")
+                rec.usage_by_stage = _usage_by_stage(rec)
+                rec.elapsed_s = time.monotonic() - t0
+                return rec
+            rec.members = [{"name": m.name, "provider": m.provider, "model": m.model} for m in members]
 
-        # Cegamento real: mascara autoidentificacao antes de qualquer julgamento.
-        blind_answers = dict(answers)
-        if s.scrub_identity and answers:
-            terms = identity_terms(members, s.identity_terms)
-            for name, txt in answers.items():
-                cleaned, hits = scrub_identity(txt, terms, question)
-                blind_answers[name] = cleaned
-                if hits:
-                    for entry in rec.stage1:
-                        if entry["name"] == name:
-                            entry["masked_terms"] = hits
-        if not answers:
-            rec.warnings.append("nenhuma resposta no estagio 1; nada a sintetizar")
-            # resposta que falhou pode ter custado (o modelo gasta o teto raciocinando
-            # e devolve ok=False com usage) — o registro tem de dizer isso
-            rec.usage_by_stage = _usage_by_stage(rec)
-            rec.elapsed_s = time.monotonic() - t0
-            return rec
-
-        # Destilacao: respostas cegas viram candidatos (questions: uma questao =
-        # um candidato; proposal: a proposta destilada de cada membro; demais:
-        # uma resposta = um candidato).
-        fmt = spec.profile.stage1_format if spec.profile else "prose"
-        member_index = {m.name: i for i, m in enumerate(members)}
-        candidates, avisos_destilacao = _distill(blind_answers, fmt, member_index)
-        rec.warnings.extend(avisos_destilacao)
-        rec.candidates = [{"id": c.id, "text": c.text, "author": c.author} for c in candidates]
-
-        # estagio 2
-        consensus = []
-        if not skip_ranking and len(candidates) >= 3:
-            criteria = (spec.profile.criteria if spec.profile and spec.profile.criteria
-                        else DEFAULT_CRITERIA)
-            ballots = self.stage2(question, candidates, members, seed, criteria,
-                                  answerers=set(answers))
-            rec.stage2 = [
-                {
-                    "ranker": b.ranker,
-                    "ok": b.ok,
-                    "error": b.error,
-                    "label_to_member": b.label_to_member,
-                    "order_labels": b.order,
-                    "order_members": b.ranked_members,
-                    "verdicts": {k: list(v) for k, v in b.verdicts.items()},
-                    "raw": b.raw,
-                    "usage": b.usage,
-                    "latency_s": b.latency_s,
-                }
-                for b in ballots
+            # estagio 1
+            answers_all = self.stage1(spec, members)
+            rec.stage1 = [
+                {"name": a.name, "provider": a.provider, "model": a.model, **a.reply.as_dict()}
+                for a in answers_all
             ]
-            for b in ballots:
-                if not b.ok:
-                    extra = " (resposta truncada por max_tokens)" if b.truncated else ""
-                    rec.warnings.append(f"estagio 2: cedula de {b.ranker} descartada — {b.error}{extra}")
-                elif b.truncated:
-                    rec.warnings.append(f"estagio 2: cedula de {b.ranker} veio truncada por max_tokens")
-            consensus = borda(ballots, [c.id for c in candidates])
-            rec.consensus = [asdict(c) for c in consensus]
-            rec.divided = divided(consensus)
-            if rec.divided:
+            answers = {a.name: a.reply.content for a in answers_all if a.ok}
+            for a in answers_all:
+                if not a.ok:
+                    rec.warnings.append(f"estagio 1: {a.name} falhou — {a.reply.error}")
+                elif a.reply.truncated:
+                    rec.warnings.append(
+                        f"estagio 1: resposta de {a.name} truncada por max_tokens — aumente o teto dele em [params]"
+                    )
+            self._checkpoint(rec, "stage1", runs_dir, interruption, t0)
+
+            # Cegamento real: mascara autoidentificacao antes de qualquer julgamento.
+            blind_answers = dict(answers)
+            if s.scrub_identity and answers:
+                terms = identity_terms(members, s.identity_terms)
+                for name, txt in answers.items():
+                    cleaned, hits = scrub_identity(txt, terms, question)
+                    blind_answers[name] = cleaned
+                    if hits:
+                        for entry in rec.stage1:
+                            if entry["name"] == name:
+                                entry["masked_terms"] = hits
+            if not answers:
+                rec.warnings.append("nenhuma resposta no estagio 1; nada a sintetizar")
+                # resposta que falhou pode ter custado (o modelo gasta o teto raciocinando
+                # e devolve ok=False com usage) — o registro tem de dizer isso
+                rec.usage_by_stage = _usage_by_stage(rec)
+                rec.elapsed_s = time.monotonic() - t0
+                return rec
+
+            # Destilacao: respostas cegas viram candidatos (questions: uma questao =
+            # um candidato; proposal: a proposta destilada de cada membro; demais:
+            # uma resposta = um candidato).
+            fmt = spec.profile.stage1_format if spec.profile else "prose"
+            member_index = {m.name: i for i, m in enumerate(members)}
+            candidates, avisos_destilacao = _distill(blind_answers, fmt, member_index)
+            rec.warnings.extend(avisos_destilacao)
+            rec.candidates = [{"id": c.id, "text": c.text, "author": c.author} for c in candidates]
+
+            # estagio 2
+            consensus = []
+            if not skip_ranking and len(candidates) >= 3:
+                criteria = (spec.profile.criteria if spec.profile and spec.profile.criteria
+                            else DEFAULT_CRITERIA)
+                ballots = self.stage2(question, candidates, members, seed, criteria,
+                                      answerers=set(answers))
+                rec.stage2 = [
+                    {
+                        "ranker": b.ranker,
+                        "ok": b.ok,
+                        "error": b.error,
+                        "label_to_member": b.label_to_member,
+                        "order_labels": b.order,
+                        "order_members": b.ranked_members,
+                        "verdicts": {k: list(v) for k, v in b.verdicts.items()},
+                        "raw": b.raw,
+                        "usage": b.usage,
+                        "latency_s": b.latency_s,
+                    }
+                    for b in ballots
+                ]
+                for b in ballots:
+                    if not b.ok:
+                        extra = " (resposta truncada por max_tokens)" if b.truncated else ""
+                        rec.warnings.append(f"estagio 2: cedula de {b.ranker} descartada — {b.error}{extra}")
+                    elif b.truncated:
+                        rec.warnings.append(f"estagio 2: cedula de {b.ranker} veio truncada por max_tokens")
+                consensus = borda(ballots, [c.id for c in candidates])
+                rec.consensus = [asdict(c) for c in consensus]
+                rec.divided = divided(consensus)
+                if rec.divided:
+                    rec.warnings.append(
+                        "conselho dividido: topo sem folga clara — trate a sintese como uma opcao, nao consenso"
+                    )
+            elif not skip_ranking:
                 rec.warnings.append(
-                    "conselho dividido: topo sem folga clara — trate a sintese como uma opcao, nao consenso"
+                    f"estagio 2 pulado: com auto-exclusao sao necessarios 3+ candidatos (havia {len(candidates)})"
                 )
-        elif not skip_ranking:
-            rec.warnings.append(
-                f"estagio 2 pulado: com auto-exclusao sao necessarios 3+ candidatos (havia {len(candidates)})"
-            )
-        self._checkpoint(rec, "stage2", runs_dir, interruption, t0)
+            self._checkpoint(rec, "stage2", runs_dir, interruption, t0)
 
         # estagio 3: synthesizer (padrao) ou decider (perfil), uma unica chamada
         mode = spec.profile.chairman_mode if spec.profile else "synthesizer"
@@ -576,6 +648,83 @@ def _usage_by_stage(rec: Run) -> dict[str, dict[str, int]]:
     }
 
 
+def _ballot_do_registro(b: dict[str, Any]) -> Ballot:
+    """Reconstitui Ballot da entrada do registro (estagio 2 herdado)."""
+    return Ballot(
+        ranker=b.get("ranker", ""),
+        label_to_member=b.get("label_to_member") or {},
+        order=b.get("order_labels") or [],
+        verdicts={k: (v[0], v[1]) for k, v in (b.get("verdicts") or {}).items()},
+        ok=bool(b.get("ok")),
+        error=b.get("error") or "",
+        raw=b.get("raw") or "",
+        truncated=bool(b.get("truncated")),
+        usage=b.get("usage"),
+        latency_s=b.get("latency_s"),
+    )
+
+
+def load_partial_for_resume(runs_dir: Path, sha_prefix: str, cfg: Config) -> tuple[Run, str]:
+    """Localiza e valida o parcial para `council ask --resume <sha-parcial>`.
+
+    Devolve (Run do parcial, sha256 integral). Guardas fail-closed, cada um com
+    codigo nomeado e NENHUM arquivo gravado:
+    - partial_not_found: prefixo sem match unico em runs/*.json
+    - not_partial: o registro casado tem partial != true
+    - stage2_incomplete: parcial parou antes do estagio 2 completo (todas as
+      cedulas dos avaliadores elegiveis ok)
+    - config_drift: o config_sha256 selado no parcial difere da config atual
+    """
+    if not runs_dir.is_dir():
+        raise ResumeError("partial_not_found", f"{runs_dir} nao existe")
+    casos: list[tuple[Path, dict[str, Any], str]] = []
+    ilegiveis = 0
+    for p in sorted(runs_dir.glob("*.json")):
+        try:
+            payload = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            ilegiveis += 1
+            continue
+        if not isinstance(payload, dict):
+            ilegiveis += 1
+            continue
+        sha = payload.get("sha256") or ""
+        if isinstance(sha, str) and sha.startswith(sha_prefix):
+            casos.append((p, payload, sha))
+    if not casos:
+        extra = f" ({ilegiveis} arquivo(s) ilegivel(e) ignorado(s))" if ilegiveis else ""
+        raise ResumeError("partial_not_found",
+                          f"nenhum registro casa o prefixo '{sha_prefix}' em {runs_dir}{extra}")
+    if len(casos) > 1:
+        raise ResumeError("partial_not_found",
+                          f"prefixo '{sha_prefix}' ambiguo: {len(casos)} registros casam"
+                          " — passe um prefixo maior")
+    path, payload, sha = casos[0]
+    if payload.get("partial") is not True:
+        raise ResumeError("not_partial",
+                          f"{path.name} e registro final, nao parcial — o resume retoma parcial")
+    campos = {f.name for f in fields(Run)}
+    rec = Run(**{k: v for k, v in payload.items() if k in campos})
+    if rec.stage_reached not in ("stage2", "synthesis"):
+        raise ResumeError("stage2_incomplete",
+                          f"parcial parou em '{rec.stage_reached or '(sem estagio gravado)'}'"
+                          " — so parcial com estagio 2 completo e retomavel")
+    resposta_ok = [e.get("name") for e in rec.stage1 if e.get("ok")]
+    elegiveis = [m for m in rec.members if m.get("name") in resposta_ok]
+    falhas = [b.get("ranker", "?") for b in rec.stage2 if not b.get("ok")]
+    if len(rec.stage2) < len(elegiveis) or falhas:
+        raise ResumeError("stage2_incomplete",
+                          f"cedulas {len(rec.stage2)}/{len(elegiveis)} dos avaliadores elegiveis"
+                          + (f", com falha: {falhas}" if falhas else ""))
+    selado = (rec.producer or {}).get("config_sha256")
+    atual = config_digest(cfg)
+    if selado != atual:
+        raise ResumeError("config_drift",
+                          f"parcial selado com config {(selado or 'ausente')[:12]},"
+                          f" atual {atual[:12]} — roster/config mudou desde a execucao")
+    return rec, sha
+
+
 def write_partial(rec: Run, runs_dir: Path, stage: str, elapsed_s: float) -> Path:
     """Grava o que ja foi pago ate este limite de estagio.
 
@@ -592,7 +741,8 @@ def write_partial(rec: Run, runs_dir: Path, stage: str, elapsed_s: float) -> Pat
     snap = replace(rec, partial=True, stage_reached=stage,
                    usage=_total_usage(rec), usage_by_stage=_usage_by_stage(rec),
                    elapsed_s=round(elapsed_s, 2))
-    path = partial_path(runs_dir, rec.started_at)
+    path = partial_path(runs_dir, rec.started_at,
+                        resumed=rec.resumed_from is not None)
     payload = asdict(snap) | {"sha256": snap.digest()}
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -601,13 +751,17 @@ def write_partial(rec: Run, runs_dir: Path, stage: str, elapsed_s: float) -> Pat
 
 
 def finalize_run(rec: Run, runs_dir: Path) -> Path:
-    """Grava o registro final e so entao apaga o parcial.
+    """Grava o registro final e so entao apaga o parcial DESTE processo.
 
     Nesta ordem: save_run que falha deixa o parcial em disco, que e tudo o que
-    sobrou do que foi pago.
+    sobrou do que foi pago. Registro retomado (resumed_from): o parcial
+    referenciado pertence a OUTRA execucao — outro carimbo, outro pid — e o
+    nome aqui so endereca o rastro proprio; o referenciado nunca e removido
+    (a secao 30 da suíte prova o arquivo intacto apos o resume).
     """
     path = save_run(rec, runs_dir)
-    partial_path(runs_dir, rec.started_at).unlink(missing_ok=True)
+    partial_path(runs_dir, rec.started_at,
+                 resumed=rec.resumed_from is not None).unlink(missing_ok=True)
     return path
 
 

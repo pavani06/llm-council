@@ -2263,6 +2263,216 @@ model = "gpt-5.6-sol"
 
         cfgmod.load = orig_load29
 
+    print("30) resume de parcial: retomada por composicao, sintese-only")
+    import contextlib as _ctx30
+    import io as _io30
+    import tempfile as _t30
+    from council import cli as _cli30
+    from council import cost as _cost30
+    from council import engine as _eng30
+    from council import runs as _runs30
+    from council.engine import ResumeError as _RE30
+    from council.engine import finalize_run as _fin30
+    from council.engine import load_partial_for_resume as _load30
+    from council.engine import Interruption as _Int30
+    from council.engine import RunInterrupted as _RI30
+
+    cfg30 = cfgmod.load(Path(__file__).parent / "council.toml")
+    cfg30.has_key = lambda p: True
+    cfg30.settings.seed = 11
+
+    def _parcial_estagio2_30(d: Path, cfg=None) -> tuple[Path, str, dict]:
+        """Execucao interrompida no limite do estagio 2: parcial com as 4
+        cedulas ok, sintese nunca chamada."""
+        cfg = cfg or cfg30
+        d.mkdir(parents=True, exist_ok=True)
+        flag30 = _Int30()
+
+        def chat_p30(self, model, messages, **kw):
+            if "FINAL RANKING" in messages[0]["content"]:
+                flag30.request("sinal SIGTERM recebido")
+            return fake_chat(self, model, messages, **kw)
+
+        orig_e, orig_a = Endpoint.chat, AnthropicEndpoint.chat
+        Endpoint.chat, AnthropicEndpoint.chat = chat_p30, chat_p30
+        try:
+            Council(cfg).run("pergunta para retomar?", runs_dir=d, interruption=flag30)
+            raise AssertionError("deveria ter interrompido no estagio 2")
+        except _RI30:
+            pass
+        finally:
+            Endpoint.chat, AnthropicEndpoint.chat = orig_e, orig_a
+        parcial = next(d.glob("*" + _runs30.PARTIAL_SUFFIX))
+        payload = json.loads(parcial.read_text(encoding="utf-8"))
+        check(payload["partial"] is True and payload["stage_reached"] == "stage2"
+              and len(payload["stage2"]) == 4 and all(b["ok"] for b in payload["stage2"]),
+              "fixture: parcial do estagio 2 completo (4 cedulas ok)")
+        return parcial, payload["sha256"], payload
+
+    with _t30.TemporaryDirectory() as td30:
+        d30 = Path(td30) / "runs"
+        parcial30, sha30, pay30 = _parcial_estagio2_30(d30)
+        antes30 = sorted(p.name for p in d30.iterdir())
+
+        # (a) guardas: erro nomeado, exit nao-zero no CLI, nenhum arquivo gravado
+        try:
+            _load30(d30, "ffffffff", cfg30)
+            check(False, "partial_not_found: prefixo sem match levanta ResumeError")
+        except _RE30 as e30:
+            check(e30.code == "partial_not_found",
+                  f"partial_not_found nomeado (foi {e30.code}: {e30})")
+
+        d30b = Path(td30) / "ambiguo"
+        d30b.mkdir()
+        for nome30 in ("um.json", "dois.json"):
+            (d30b / nome30).write_text(json.dumps(pay30), encoding="utf-8")
+        try:
+            _load30(d30b, sha30[:8], cfg30)
+            check(False, "prefixo ambiguo levanta ResumeError")
+        except _RE30 as e30:
+            check(e30.code == "partial_not_found" and "ambiguo" in str(e30),
+                  f"prefixo ambiguo falha fechado ({e30})")
+
+        d30f = Path(td30) / "finais"
+        d30f.mkdir()
+        rec30f = Council(cfg30).run("registro final?", runs_dir=d30f)
+        fin30f = _fin30(rec30f, d30f)
+        sha_final30 = json.loads(fin30f.read_text(encoding="utf-8"))["sha256"]
+        try:
+            _load30(d30f, sha_final30[:8], cfg30)
+            check(False, "not_partial: registro final levanta ResumeError")
+        except _RE30 as e30:
+            check(e30.code == "not_partial", f"not_partial nomeado (foi {e30.code})")
+
+        d30i = Path(td30) / "incompleto"
+        d30i.mkdir()
+        pay_i30 = dict(pay30)
+        pay_i30["stage_reached"] = "stage1"
+        (d30i / "parcial-truncado-partial.json").write_text(json.dumps(pay_i30), encoding="utf-8")
+        try:
+            _load30(d30i, sha30[:8], cfg30)
+            check(False, "stage2_incomplete: parcial de stage1 levanta ResumeError")
+        except _RE30 as e30:
+            check(e30.code == "stage2_incomplete" and "stage1" in str(e30),
+                  f"stage2_incomplete nomeia onde parou ({e30})")
+
+        d30c = Path(td30) / "cedula-ruim"
+        d30c.mkdir()
+        pay_c30 = json.loads(json.dumps(pay30))
+        pay_c30["stage2"][1]["ok"] = False
+        (d30c / "cedula-ruim-partial.json").write_text(json.dumps(pay_c30), encoding="utf-8")
+        try:
+            _load30(d30c, sha30[:8], cfg30)
+            check(False, "stage2_incomplete: cedula com falha levanta ResumeError")
+        except _RE30 as e30:
+            check(e30.code == "stage2_incomplete" and pay_c30["stage2"][1]["ranker"] in str(e30),
+                  f"stage2_incomplete nomeia a cedula com falha ({e30})")
+
+        cfg30.settings.seed = 12  # config derivada muda -> drift
+        try:
+            _load30(d30, sha30[:8], cfg30)
+            check(False, "config_drift: config diferente levanta ResumeError")
+        except _RE30 as e30:
+            check(e30.code == "config_drift", f"config_drift nomeado (foi {e30.code})")
+        cfg30.settings.seed = 11
+
+        depois30 = sorted(p.name for p in d30.iterdir())
+        check(antes30 == depois30, "nenhuma guarda gravou arquivo (runs/ intocado)")
+
+        def _ask30(**kw30):
+            a30 = type("A30", (), {
+                "config": None, "members": None, "chairman": None,
+                "question": None, "no_rank": False, "json": False,
+                "quiet": False, "resume": None,
+            })()
+            for k30, v30 in kw30.items():
+                setattr(a30, k30, v30)
+            return a30
+
+        for kwargs30, trecho30 in [
+            ({"resume": sha30[:8], "no_rank": True}, "no_rank"),
+            ({"resume": sha30[:8], "question": "pergunta alem do parcial"}, "pergunta posicional"),
+        ]:
+            err30 = _io30.StringIO()
+            with _ctx30.redirect_stderr(err30):
+                rc30 = _cli30.cmd_ask(_ask30(**kwargs30))
+            check(rc30 == 2 and "resume_invalid_args" in err30.getvalue(),
+                  f"resume_invalid_args com {trecho30} (rc={rc30})")
+
+        # (b) resume feliz por engine: registro novo, estagios herdados, consenso
+        # recomputado igual, sintese nova, parcial preservado
+        par30, sha_par30 = _load30(d30, sha30[:8], cfg30)
+        check(sha_par30 == sha30 and par30.stage_reached == "stage2",
+              "load devolve o parcial e o sha integral")
+        rec30 = Council(cfg30).run(None, resume_from=(par30, sha_par30), runs_dir=d30)
+        check(rec30.resumed_from == sha30,
+              f"resumed_from e o sha256 do parcial ({(rec30.resumed_from or '')[:12]})")
+        check(rec30.stage1 == pay30["stage1"] and rec30.stage2 == pay30["stage2"],
+              "stage1 e stage2 herdados verbatim (== dict a dict)")
+        check(rec30.candidates == pay30["candidates"],
+              "candidates herdados verbatim")
+        check(rec30.consensus == pay30["consensus"] and rec30.divided == pay30["divided"],
+              "consenso recomputado identico ao do parcial (borda deterministica)")
+        check(rec30.seed == pay30["seed"] and rec30.question == pay30["question"],
+              "question e seed herdados")
+        check(any("herdados de" in w and sha30[:12] in w for w in rec30.warnings),
+              "warning nomeia a heranca pelo sha12")
+        check(rec30.synthesis.get("content") == "SINTESE FINAL" and rec30.synthesis.get("ok"),
+              "sintese nova presente e ok")
+        ubs30 = rec30.usage_by_stage
+        check(ubs30["stage1"] == pay30["usage_by_stage"]["stage1"]
+              and ubs30["stage2"] == pay30["usage_by_stage"]["stage2"],
+              "usage dos estagios herdados e o do parcial")
+        sint_u30 = rec30.synthesis["usage"]
+        check(ubs30["synthesis"]["total_tokens"] == sint_u30["total_tokens"] > 0,
+              "usage da sintese e o fresco")
+        check(ubs30["total"]["total_tokens"] == ubs30["stage1"]["total_tokens"]
+              + ubs30["stage2"]["total_tokens"] + ubs30["synthesis"]["total_tokens"],
+              "usage_by_stage.total = soma exata dos tres estagios")
+        check(rec30.usage["total_tokens"] == pay30["usage"]["total_tokens"]
+              + sint_u30["total_tokens"],
+              "usage historico mantem a semantica (estagio 1 + sintese, sem estagio 2)")
+        final30 = _fin30(rec30, d30)
+        f30 = json.loads(final30.read_text(encoding="utf-8"))
+        check(f30["partial"] is False and f30["resumed_from"] == sha30,
+              "final nasce limpo e referencia o parcial por resumed_from")
+        check(parcial30.is_file(),
+              f"parcial referenciado PRESERVADO apos o resume ({parcial30.name})")
+        sobras30 = sorted(p.name for p in d30.glob("*" + _runs30.PARTIAL_SUFFIX))
+        check(sobras30 == [parcial30.name],
+              f"rastro proprio do resume sai em finalize; so o referenciado fica ({sobras30})")
+        led30 = _cost30.ledger(d30)
+        check(led30["registros"]["finais"] == 1 and led30["registros"]["parciais"] == 1,
+              f"ledger nao quebra: final e parcial separados ({led30['registros']})")
+
+        # (c) CLI: opcao no help e caminho inteiro por cmd_ask
+        sub30 = next(act for act in _cli30.build_parser()._actions if act.dest == "cmd")
+        check("--resume" in sub30.choices["ask"].format_help(),
+              "council ask --help mostra a opcao --resume")
+
+        cfg_cli30 = cfgmod.load(Path(__file__).parent / "council.toml")
+        cfg_cli30.has_key = lambda p: True
+        cfg_cli30.settings.seed = 11
+        d30c2 = Path(td30) / "cli" / "runs"
+        # runs_dir entra no config_sha256: tem de estar no selo ANTES do fixture
+        cfg_cli30.settings.runs_dir = str(d30c2)
+        parcial_cli30, sha_cli30, pay_cli30 = _parcial_estagio2_30(d30c2, cfg=cfg_cli30)
+        orig_load30 = cfgmod.load
+        cfgmod.load = lambda p=None: cfg_cli30
+        out30 = _io30.StringIO()
+        err30 = _io30.StringIO()
+        try:
+            with _ctx30.redirect_stdout(out30), _ctx30.redirect_stderr(err30):
+                rc30 = _cli30.cmd_ask(_ask30(resume=sha_cli30[:8]))
+        finally:
+            cfgmod.load = orig_load30
+        finais30 = sorted((d30c2).glob("*.json"))
+        check(rc30 == 0 and "SINTESE FINAL" in out30.getvalue(),
+              f"council ask --resume roda fim a fim (rc={rc30}, err: {err30.getvalue().strip()[-80:]})")
+        check(len(finais30) == 2
+              and any(p.name.endswith(_runs30.PARTIAL_SUFFIX) for p in finais30),
+              "CLI deixa o parcial e grava o final")
+
     print()
     print()
     if FALHAS:

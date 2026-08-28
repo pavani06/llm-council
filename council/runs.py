@@ -20,15 +20,21 @@ def stamp_for(started_at: str) -> str:
     return started_at.replace(":", "").replace("-", "")
 
 
-def partial_path(runs_dir: Path, started_at: str) -> Path:
+def partial_path(runs_dir: Path, started_at: str, resumed: bool = False) -> Path:
     """Parcial de UMA execucao deste processo.
 
     O carimbo tem granularidade de segundo: sozinho, ele colide quando dois
     bracos comecam no mesmo segundo (o experimento 1-vs-N roda bracos em
     paralelo) e um apagaria o parcial do outro. O pid separa os dois. Contra o
     registro final nao ha colisao possivel: final termina em <sha12>.json.
+
+    resumed=True: parcial de uma execucao retomada (`--resume`). Sem o sufixo,
+    um resume aberto no mesmo segundo e processo do original colidiria com o
+    parcial referenciado — sobrescrevendo-o em voo e apagando-o no finalize,
+    exatamente o arquivo que o resume existe por contrato preservar.
     """
-    return runs_dir / f"{stamp_for(started_at)}-{os.getpid()}{PARTIAL_SUFFIX}"
+    meio = "-r" if resumed else ""
+    return runs_dir / f"{stamp_for(started_at)}-{os.getpid()}{meio}{PARTIAL_SUFFIX}"
 
 
 def final_runs(runs_dir: Path) -> list[Path]:
