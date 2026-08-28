@@ -138,8 +138,16 @@ dissidência `e099e70`, Candidato B).
 
 ## 11. Emendas
 
-Nenhuma. Emenda = entrada nova nesta seção com data, texto-base (commit do
+Emenda = entrada nova nesta seção com data, texto-base (commit do
 pré-registro que emenda), motivo e ato nomeado do operador.
+
+### Emenda 1 — Fechamento pré-código do experimento (28/08/2026)
+
+- Texto-base: `docs/prereg/2026-08-27-experimento-1vsN.md` na tag `prereg-1vsN` (8b82214).
+- Motivo: avaliação do conselho `d1adb36e046a` (28/08) — o selo cobria princípios,
+  não instâncias/tratamento/decisão; manifest e rubricas aprovados pelo operador.
+  Texto integral: `docs/prereg/2026-08-28-emenda-1.md`.
+- Ato do operador: 28/08 14:51 — "aprovo e cole a entrada".
 
 ---
 
