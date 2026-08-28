@@ -1,33 +1,34 @@
-# Handoff — issue #47 (Tarefa 3: `--rank-lite`)
-PR #50 · branch issue/47-rank-lite (código em 0482b67) · 2026-08-28
+# Handoff — issue #47 (Tarefa 4: auditor classificado)
+PR #51 · branch issue/47-auditor-classificado (código em 0355478) · 2026-08-28
 
 ## O que mudou no repo
-- `council/engine.py`: campo aditivo `stage2_mode` no `Run` (default `"full"`, ausente
-  em registro antigo = `"full"` — Emenda 2 selada); `stage2(lite=False)` seleciona os
-  primeiros `max(2, len(answerers)//2)` avaliadores NA ORDEM DA CONFIG; `run(rank_lite=)`
-  seta `stage2_mode="lite"` + warning "estágio 2 em modo lite (deliberação não plena):
-  <n>/<m> avaliadores". Sem a flag, byte-idêntico ao atual.
-- `council/cli.py`: `ask --rank-lite`; exclusivo com `--no-rank` e `--resume`
-  (`rank_lite_invalid_args`, exit 2, nada gravado).
-- `test_offline.py`: seção 32, +12 checks (438 total, exit 0); golden byte a byte.
-- Estado anterior: T1 (`a0e6284`) e T2 (`51e1936`) merged; Emenda 2 pushed (`9eab0df`).
+- `council/audit.py`: `classificar_termo()` (heurística de FORMA: "estrutural" =
+  snake_case, dotted.path, hex com dígito, número, sigla com dígitos, X-yy-zz;
+  "prosa" = restante) — limitação "não julga verdade" no docstring; `Acrescimo.classes`
+  aditivo + `.estrutural`; `Auditoria.estruturais`/`.a_verificar` particionam.
+  Extração (`termos_especificos`) e `prompt_verificacao` intocados.
+- `council/cli.py`: `cmd_audit` em dois blocos — "acréscimos estruturais prováveis
+  (nomeação própria do presidente)" e "acréscimos a verificar (possível alegação
+  factual)" — com a nota de que quem julga é o operador.
+- `test_offline.py`: seção 33, +15 checks (453 total, exit 0); golden byte a byte.
+- Smoke real: `council audit d1adb36e046a` → 4/4 trechos no bloco estrutural.
 
 ## Decisões tomadas em voo (fora do plano)
-- Parcial lite sob o guarda da Tarefa 1 → `stage2_incomplete` (2/4 cédulas): resume de
-  parcial lite segue fail-closed e manda reexecutar integral — estendê-lo é issue
-  futura; teste prova o fail-closed.
-- Warning usa n = cédulas geradas, m = respondentes elegíveis do estágio 1.
+- Hex exige ≥ 1 dígito e ≥ 6 chars: "defaced" (tudo letras hex) seria falso
+  estrutural; shas reais sempre têm dígito.
+- Títulos dos blocos sem acento (convenção das strings de CLI; a issue cita com
+  acento — forma, não contrato).
+- Trecho vai ao bloco estrutural só com TODOS os termos estruturais (conservador).
 
 ## Pegadinhas descobertas
-- O chat global da suíte, desde a seção 9, é o wrapper que derruba o glm (429) e ele
-  NUNCA é restaurado — seções novas que rodem `ask` completo precisam patchar o
-  `fake_chat` localmente (seção 32(b) faz isso), senão respondem 3/4 em silêncio.
+- `python -m council audit X --config Y` não parseia: `--config` é global e vai
+  ANTES do subcomando.
 
 ## O que a próxima issue precisa saber
-- Tarefa 4 (auditor classificado): não toca engine; `stage2_mode` e `resumed_from` são
-  os únicos campos novos do `Run` (Emenda 2 fecha o schema desta fase).
-- O epilog do `ask` (T2) ainda não cita `--rank-lite`; se a issue quiser, é 1 linha.
+- Épico #47 completo (T0-T4). `Acrescimo.classes` é aditivo: consumidores antigos
+  (cmd_ask, cortesia) seguem funcionando.
+- Fase 2 (experimento 1-vs-N) pode começar: schema selado com Emenda 2, pushed.
 
 ## Pendências deixadas
-- Resume de parcial lite (extensão futura, fora do escopo declarado).
-- Epilog sem menção ao `--rank-lite` (só citado em `--help` da opção).
+- `--json` no audit segue inexistente (fora de escopo declarado); classificação
+  hoje só na estrutura de dados e nos blocos de texto.

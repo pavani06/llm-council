@@ -99,6 +99,36 @@ def _frases_cruas(texto: str) -> list[str]:
     return [p.strip() for p in partes if p.strip()]
 
 
+# Forma do termo, nao verdade: o que o presidente nomeou por conta propria
+# costuma ser estrutura do dominio (ids, numeros, padroes), nao alegacao.
+_ESTRUTURAL = (
+    re.compile(r"^[a-z]+(?:_[a-z0-9]+)+$"),                    # snake_case
+    re.compile(r"^[a-z]+(?:\.[a-zA-Z0-9_]+)+$"),               # dotted.path
+    re.compile(r"^(?:0x)?(?=[0-9a-fA-F]*\d)[0-9a-fA-F]{6,}$"),  # hex (ex. sha)
+    re.compile(r"^\d+(?:[.,]\d+)?%?$"),                        # numero
+    re.compile(r"^(?=.*\d)[A-Z][A-Z0-9]+$"),                   # sigla com digitos
+    re.compile(r"^[A-Za-z0-9]+(?:-[a-z0-9]+)+$"),              # X-yy-zz (N-vs-1)
+)
+
+
+def classificar_termo(termo: str) -> str:
+    """Devolve "estrutural" ou "prosa" pela FORMA do termo.
+
+    "Estrutural" = nomeacao propria do presidente: snake_case, dotted.path,
+    hex, numero, sigla com digitos, padrao X-yy-zz. "Prosa" = o restante,
+    possivel alegacao factual. LIMITACAO: heuristica de forma — nao julga
+    verdade; termo estrutural pode embedar erro e termo prosa pode ser
+    inofensivo. Quem julga e o operador.
+    """
+    t = termo.strip()
+    if not t:
+        return "prosa"
+    for padrao in _ESTRUTURAL:
+        if padrao.match(t):
+            return "estrutural"
+    return "prosa"
+
+
 def frases(texto: str) -> list[str]:
     partes = re.split(r"(?<=[.!?:])\s+(?=[A-ZÀ-Ý])|\n{2,}", texto)
     return [p.strip() for p in partes if p.strip()]
@@ -108,6 +138,13 @@ def frases(texto: str) -> list[str]:
 class Acrescimo:
     frase: str
     termos: list[str]
+    # T4 (aditivo): classe de forma de cada termo, na mesma ordem de `termos`
+    classes: list[str] = field(default_factory=list)
+
+    @property
+    def estrutural(self) -> bool:
+        """Trecho estrutural so se TODOS os termos forem de nomeacao propria."""
+        return bool(self.classes) and all(c == "estrutural" for c in self.classes)
 
 
 @dataclass
@@ -121,6 +158,16 @@ class Auditoria:
     @property
     def limpo(self) -> bool:
         return not self.acrescimos and not self.erro
+
+    @property
+    def estruturais(self) -> list[Acrescimo]:
+        """Acrecimos cujos termos sao todos nomeacao propria (T4, aditivo)."""
+        return [a for a in self.acrescimos if a.estrutural]
+
+    @property
+    def a_verificar(self) -> list[Acrescimo]:
+        """Acrecimos com pelo menos um termo em prosa — possivel alegacao."""
+        return [a for a in self.acrescimos if not a.estrutural]
 
 
 def auditar(rec: dict[str, Any], bundle_text: str | None = None) -> Auditoria:
@@ -162,7 +209,8 @@ def auditar(rec: dict[str, Any], bundle_text: str | None = None) -> Auditoria:
             key=str.lower,
         )
         if ausentes:
-            aud.acrescimos.append(Acrescimo(frase=f, termos=ausentes))
+            aud.acrescimos.append(Acrescimo(frase=f, termos=ausentes,
+                                            classes=[classificar_termo(t) for t in ausentes]))
     return aud
 
 

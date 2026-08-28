@@ -590,13 +590,23 @@ def cmd_audit(args) -> int:
         print(f"{DIM}Isso NAO prova que a sintese e fiel: parafrase incorreta passa por aqui.{RESET}")
         return 0
 
-    print(f"{BOLD}{len(aud.acrescimos)} trecho(s) com termo que nenhuma resposta continha{RESET}")
-    print()
-    for i, ac in enumerate(aud.acrescimos, start=1):
-        print(f"  {BOLD}[{i}]{RESET} termos: {', '.join(ac.termos)}")
-        for linha in _quebrar(ac.frase.strip(), 74):
-            print(f"      {linha}")
+    estruturais = [a for a in aud.acrescimos if a.estrutural]
+    verificar = [a for a in aud.acrescimos if not a.estrutural]
+
+    def _bloco(titulo: str, itens: list) -> None:
+        if not itens:
+            return
+        print(f"{BOLD}{len(itens)} — {titulo}{RESET}")
         print()
+        for i, ac in enumerate(itens, start=1):
+            print(f"  {BOLD}[{i}]{RESET} termos: {', '.join(ac.termos)}")
+            for linha in _quebrar(ac.frase.strip(), 74):
+                print(f"      {linha}")
+            print()
+
+    _bloco("acrescimos estruturais provaveis (nomeacao propria do presidente)",
+           estruturais)
+    _bloco("acrescimos a verificar (possivel alegacao factual)", verificar)
 
     if args.verify:
         rc = _verificar(cfg, rec, aud)

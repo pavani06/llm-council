@@ -2581,6 +2581,33 @@ model = "gpt-5.6-sol"
     check(_cli32.build_parser().parse_args(["ask", "--rank-lite", "pergunta"]).rank_lite
           is True, "--rank-lite sozinho parseia")
 
+    print("33) auditor classificado: estrutural vs prosa")
+    from council import audit as _aud33
+    # fixtures: termos reais dos 4 trechos flagados em d1adb36e046a (28/08)
+    for termo33 in ("evidence_snapshot_sha", "inclusion_rule", "load_bearing_status",
+                    "rubric_ref", "2.8", "N-vs-1", "d1adb36e046a", "SHA256"):
+        check(_aud33.classificar_termo(termo33) == "estrutural",
+              f"estrutural: {termo33}")
+    for termo33 in ("Retrospectivo", "denominador", "defaced"):
+        check(_aud33.classificar_termo(termo33) == "prosa", f"prosa: {termo33}")
+
+    rec33 = {
+        "question": "pergunta base",
+        "stage1": [{"name": "m", "ok": True, "content": "resposta base do conselho"}],
+        "synthesis": {"content": "teste de evidence_snapshot_sha com 2.8 embutido. "
+                                 "O plano cita Facade como padrao do sistema."},
+    }
+    aud33 = _aud33.auditar(rec33)
+    check(len(aud33.acrescimos) == 2, f"2 acrescimos sintetizados (foi {len(aud33.acrescimos)})")
+    check(len(aud33.estruturais) == 1 and aud33.estruturais[0].classes
+          == ["estrutural", "estrutural"],
+          f"trecho com so estrutura vai ao bloco estrutural ({aud33.estruturais})")
+    check(len(aud33.a_verificar) == 1 and "prosa" in aud33.a_verificar[0].classes,
+          f"trecho com termo prosa vai a verificacao ({aud33.a_verificar})")
+    check(len(aud33.estruturais) + len(aud33.a_verificar) == len(aud33.acrescimos)
+          and not (set(map(id, aud33.estruturais)) & set(map(id, aud33.a_verificar))),
+          "estruturais e a_verificar particionam os acrescimos")
+
     print()
     print()
     if FALHAS:
