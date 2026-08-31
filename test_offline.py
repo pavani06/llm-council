@@ -2608,6 +2608,24 @@ model = "gpt-5.6-sol"
           and not (set(map(id, aud33.estruturais)) & set(map(id, aud33.a_verificar))),
           "estruturais e a_verificar particionam os acrescimos")
 
+    # 34) o sintetizador e avisado quando o conselho esta dividido (issue #53, item 1)
+    from council import prompts as _pr34
+
+    _ans34 = {"a": "Resposta A do conselho.", "b": "Resposta B do conselho."}
+    p_div34 = _pr34.chairman_prompt("q?", _ans34, [], blind=True,
+                                    mode="synthesizer", divided=True)
+    p_uni34 = _pr34.chairman_prompt("q?", _ans34, [], blind=True,
+                                    mode="synthesizer", divided=False)
+    check(p_div34 != p_uni34,
+          "sintetizador recebe texto diferente quando o conselho esta dividido")
+    check("DIVIDIDO" in p_div34,
+          "o prompt do sintetizador nomeia a divisao quando ela existe")
+    check("DIVIDIDO" not in p_uni34,
+          "sem divisao, o sintetizador nao recebe o aviso")
+    # o sintetizador nao decide: nao deve herdar a gramatica do decisor
+    check("ENCALHADO" not in p_div34 and "ESCOLHA" not in p_div34,
+          "o aviso do sintetizador nao copia a gramatica de veredito do decisor")
+
     print()
     print()
     if FALHAS:

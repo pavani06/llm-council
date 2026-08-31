@@ -80,6 +80,24 @@ def chairman_prompt(question: str, answers: dict[str, str], consensus, *, blind:
     corpo = "\n\n".join(f"### {alias[n]}\n{answers[n]}" for n in alias)
     tabela = _tabela_consensus(alias, consensus)
 
+    # O sintetizador nao escolhe: nao herda a gramatica do decisor (STATUS,
+    # ESCOLHA, ENCALHADO), que nao existe aqui. O que ele precisa saber e um
+    # FATO sobre a tabela acima — que a avaliacao cruzada nao separou o topo —
+    # porque sem isso ele le a primeira posicao como se fosse a posicao do
+    # conselho. O prompt ja pede para tratar divergencia de conteudo; o que
+    # faltava era avisar que a propria ORDEM nao decidiu.
+    if divided:
+        divisao = (
+            "\nO CONSELHO ESTA DIVIDIDO: a avaliacao cruzada nao separou o topo. A ordem da "
+            "tabela acima nao e um veredito, e a primeira posicao nao representa a posicao do "
+            "conselho. Trate a divergencia como o achado principal: diga onde exatamente as "
+            "respostas se afastam e o que decidiria a disputa. Nao eleja uma delas por estar "
+            "em primeiro, nao faca media entre posicoes incompativeis, e se nada decide, diga "
+            "que nao decide.\n"
+        )
+    else:
+        divisao = ""
+
     return f"""Voce preside um conselho. Varios sistemas responderam a mesma pergunta e se avaliaram \
 mutuamente as cegas. Sua tarefa nao e escolher um vencedor nem resumir: e produzir a melhor resposta \
 possivel usando o que o conselho reuniu.
@@ -92,7 +110,7 @@ RESPOSTAS DO CONSELHO:
 {corpo}
 
 {tabela}
-
+{divisao}
 Como sintetizar:
 - Onde o conselho concorda, afirme direto, sem citar quem disse.
 - Onde discorda, essa e a informacao mais valiosa: diga qual e a divergencia e o que decide entre as \
