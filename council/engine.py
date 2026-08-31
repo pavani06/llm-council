@@ -182,8 +182,8 @@ class RunInterrupted(Exception):
 class ResumeError(Exception):
     """Guarda de retomada falhou: fail-closed, erro nomeado, nada gravado.
 
-    O codigo (partial_not_found, not_partial, stage2_incomplete, config_drift,
-    resume_invalid_args) e a interface: o CLI imprime o codigo e sai
+    O codigo (partial_not_found, not_partial, stage2_incomplete, stage2_lite,
+    config_drift, resume_invalid_args) e a interface: o CLI imprime o codigo e sai
     nao-zero sem escrever arquivo algum.
     """
 
@@ -375,6 +375,12 @@ class Council:
         rec.members = [dict(m) for m in par.members]
         rec.stage1 = [dict(e) for e in par.stage1]
         rec.stage2 = [dict(e) for e in par.stage2]
+        # O modo do estagio 2 acompanha as cedulas que ele produziu. Sem isto o
+        # retomado nasce com o default "full" e o registro afirmaria deliberacao
+        # plena sobre cedulas de um estagio 2 reduzido — proveniencia falsa no
+        # artefato selado. Registro antigo sem o campo le como "full" pelo
+        # default do dataclass, que e o que ele de fato era.
+        rec.stage2_mode = par.stage2_mode
         rec.candidates = [dict(c) for c in par.candidates]
         if par.decision is not None:
             rec.decision = dict(par.decision)
@@ -688,6 +694,8 @@ def load_partial_for_resume(runs_dir: Path, sha_prefix: str, cfg: Config) -> tup
     - not_partial: o registro casado tem partial != true
     - stage2_incomplete: parcial parou antes do estagio 2 completo (todas as
       cedulas dos avaliadores elegiveis ok)
+    - stage2_lite: o estagio 2 rodou em modo lite. Esta completo para o modo,
+      mas deliberacao nao plena nao e retomavel (politica, nao incompletude)
     - config_drift: o config_sha256 selado no parcial difere da config atual
     """
     if not runs_dir.is_dir():
@@ -727,6 +735,17 @@ def load_partial_for_resume(runs_dir: Path, sha_prefix: str, cfg: Config) -> tup
     resposta_ok = [e.get("name") for e in rec.stage1 if e.get("ok")]
     elegiveis = [m for m in rec.members if m.get("name") in resposta_ok]
     falhas = [b.get("ranker", "?") for b in rec.stage2 if not b.get("ok")]
+    # Parcial em modo lite nao e retomavel — e politica, nao acidente: o lite
+    # roda menos avaliadores de proposito e --rank-lite e exclusivo com --resume
+    # (cli.py). O que estava errado era o CODIGO: o estagio 2 de um parcial lite
+    # esta COMPLETO para o modo em que rodou, e reprova-lo por "incompleto"
+    # atribui a causa errada a quem le o erro. O comportamento nao muda —
+    # fail-closed, reexecuta integral — muda o que ele diz.
+    if rec.stage2_mode == "lite":
+        raise ResumeError("stage2_lite",
+                          f"parcial rodou o estagio 2 em modo lite "
+                          f"({len(rec.stage2)} de {len(elegiveis)} avaliadores, por escolha "
+                          f"do modo) — deliberacao nao plena nao e retomavel; reexecute integral")
     if len(rec.stage2) < len(elegiveis) or falhas:
         raise ResumeError("stage2_incomplete",
                           f"cedulas {len(rec.stage2)}/{len(elegiveis)} dos avaliadores elegiveis"

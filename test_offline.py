@@ -2555,10 +2555,15 @@ model = "gpt-5.6-sol"
               "parcial lite carrega stage2_mode e 2 cedulas")
         try:
             _eng32.load_partial_for_resume(d32b, pay_l32["sha256"][:8], cfg32)
-            check(False, "parcial lite levanta stage2_incomplete")
+            check(False, "parcial lite levanta ResumeError")
         except _RE32 as e32:
-            check(e32.code == "stage2_incomplete",
-                  f"parcial lite fail-closed no resume ({e32})")
+            # o fail-closed continua; o codigo deixou de atribuir a causa errada.
+            # "stage2_incomplete" dizia incompleto sobre um estagio 2 que esta
+            # completo para o modo em que rodou (issue #53, item 5).
+            check(e32.code == "stage2_lite",
+                  f"parcial lite fail-closed pelo motivo verdadeiro ({e32})")
+            check("lite" in str(e32) and "retomavel" in str(e32),
+                  f"o erro nomeia o modo e a politica ({e32})")
 
     # (d) args: rank_lite_invalid_args; flag sozinha parseia
     def _ask32(**kw32):
@@ -2608,8 +2613,11 @@ model = "gpt-5.6-sol"
           and not (set(map(id, aud33.estruturais)) & set(map(id, aud33.a_verificar))),
           "estruturais e a_verificar particionam os acrescimos")
 
-    # 34) o sintetizador e avisado quando o conselho esta dividido (issue #53, item 1)
+    # 34) sinais computados que chegam a quem decide (issue #53)
     from council import prompts as _pr34
+    from council import engine as _eng34
+    from council.engine import Council as _C34, Run as _R34, ResumeError as _RE34
+    import tempfile as _t34
 
     _ans34 = {"a": "Resposta A do conselho.", "b": "Resposta B do conselho."}
     p_div34 = _pr34.chairman_prompt("q?", _ans34, [], blind=True,
@@ -2625,6 +2633,47 @@ model = "gpt-5.6-sol"
     # o sintetizador nao decide: nao deve herdar a gramatica do decisor
     check("ENCALHADO" not in p_div34 and "ESCOLHA" not in p_div34,
           "o aviso do sintetizador nao copia a gramatica de veredito do decisor")
+
+    # herdar o modo do estagio 2 na retomada: sem isto, um parcial lite
+    # retomado gravaria "full" e o registro afirmaria deliberacao plena.
+    cfg34 = cfgmod.load(Path(__file__).parent / "council.toml")
+    membros34 = [{"name": m.name, "model": m.model} for m in cfg34.active_members()][:2]
+    par34 = _R34(question="q", seed=1, started_at="x", config_source="y")
+    par34.stage2_mode = "lite"
+    par34.members = membros34
+    par34.stage1 = [{"name": m["name"], "ok": True, "content": f"resposta de {m['name']}"}
+                    for m in membros34]
+    par34.stage2 = [{"ranker": membros34[0]["name"], "ok": True, "label_to_member": {},
+                     "order_labels": [], "order_members": [], "verdicts": {}}]
+    par34.candidates = [{"id": "C1", "text": "t", "author": membros34[0]["name"]}]
+    rec34 = _R34(question="q", seed=1, started_at="x", config_source="y")
+    _C34(cfg34)._herdar_estagios(rec34, par34, "sha")
+    check(rec34.stage2_mode == "lite",
+          f"retomada herda o modo do estagio 2 (veio {rec34.stage2_mode!r})")
+
+    # o codigo de erro para de atribuir causa errada: o estagio 2 de um parcial
+    # lite esta COMPLETO para o modo em que rodou; o que impede a retomada e a
+    # politica, nao a incompletude.
+    with _t34.TemporaryDirectory() as td34:
+        d34 = Path(td34) / "runs"
+        d34.mkdir(parents=True)
+        pay34 = {
+            "sha256": "f" * 64, "partial": True, "stage_reached": "stage2",
+            "stage2_mode": "lite", "question": "q", "seed": 1, "started_at": "x",
+            "config_source": "y", "members": membros34,
+            "stage1": [{"name": m["name"], "ok": True, "content": "c"} for m in membros34],
+            "stage2": [{"ranker": membros34[0]["name"], "ok": True}],
+            "producer": {"config_sha256": _eng34.config_digest(cfg34)},
+        }
+        (d34 / "20260101T000000+0000-f.json").write_text(json.dumps(pay34), encoding="utf-8")
+        try:
+            _eng34.load_partial_for_resume(d34, "f" * 8, cfg34)
+            check(False, "parcial lite levanta ResumeError")
+        except _RE34 as e34:
+            check(e34.code == "stage2_lite",
+                  f"parcial lite reprova por stage2_lite, nao por incompletude ({e34.code})")
+            check("completo" not in str(e34).lower() or "nao plena" in str(e34),
+                  f"o erro nao afirma incompletude de um estagio 2 completo ({e34})")
 
     print()
     print()
