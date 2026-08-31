@@ -97,7 +97,10 @@ TOOLS: list[dict[str, Any]] = [
                 "run_refs": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Opcional: prefixos de sha256 de deliberacoes anteriores desta cadeia.",
+                    "description": "Opcional: prefixos de sha256 de deliberacoes anteriores desta "
+                                   "cadeia. Injeta sintese, consenso e divisao de cada uma no "
+                                   "estagio 1, em secao separada do bundle. Um nivel: o que a "
+                                   "referida referiu nao e puxado.",
                 },
                 "members": {
                     "type": "string",

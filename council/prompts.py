@@ -211,19 +211,58 @@ resposta; nao escreva 'PROPOSAL' em nenhuma outra linha."
 }
 
 
+def linhagem_section(refs: list[dict]) -> str:
+    """Texto da linhagem: o que cada deliberacao referida entrega ao conselho novo.
+
+    Entram `synthesis`, `consensus` e `divided` — nao o stage1 inteiro, que faria
+    o conselho novo ler conselheiros antigos como evidencia e multiplicaria o
+    custo pelo numero de conselheiros.
+
+    `divided` viaja junto porque a sintese sozinha JA alisou a divergencia:
+    propaga-la sem o aviso faria o --ref virar telefone sem fio que ganha
+    confianca a cada salto, apagando a disputa antes de chegar a quem decide.
+    """
+    blocos = []
+    for r in refs:
+        sha = str(r.get("sha256") or "")[:12]
+        pergunta = str(r.get("question") or "").strip()
+        syn = str((r.get("synthesis") or {}).get("content") or "").strip()
+        cons = [c for c in (r.get("consensus") or []) if c.get("member")]
+        partes = [f"### {sha} — {pergunta}"]
+        if r.get("divided"):
+            partes.append(
+                "O CONSELHO ESTAVA DIVIDIDO nesta deliberacao: a avaliacao cruzada nao "
+                "separou o topo, entao a sintese abaixo NAO representa uma posicao unica "
+                "do conselho. Trate-a como registro de uma disputa, nao como conclusao."
+            )
+        if cons:
+            partes.append("Consenso: " + " · ".join(
+                f"{c['member']} {float(c.get('score') or 0):.2f}" for c in cons))
+        partes.append(syn)
+        blocos.append("\n".join(partes))
+    return ("LINHAGEM (deliberacoes anteriores referidas; um nivel, sem recursao):\n\n"
+            + "\n\n".join(blocos))
+
+
 def stage1_user_prompt(question: str, bundle: str | None = None,
-                       stage1_format: str = "prose") -> str:
-    """Mensagem de user do estagio 1. Sem bundle e em prose devolve a pergunta
-    inalterada — o payload do caminho sem perfil tem de ser byte-identico ao atual."""
+                       stage1_format: str = "prose",
+                       linhagem: str | None = None) -> str:
+    """Mensagem de user do estagio 1. Sem bundle, sem linhagem e em prose devolve
+    a pergunta inalterada — o payload do caminho sem perfil tem de ser
+    byte-identico ao atual."""
     if stage1_format not in _STAGE1_DIRETIVAS and stage1_format != "prose":
         raise ValueError(
             f"stage1_format desconhecido: '{stage1_format}' (use prose, questions ou proposal)"
         )
-    if not bundle and stage1_format == "prose":
+    if not bundle and not linhagem and stage1_format == "prose":
         return question
     partes = []
     if bundle:
         partes.append(f"CONTEXTO (evidencia da deliberacao):\n{bundle}")
+    # Secao propria: o que o operador escreveu e o que a maquina puxou nao podem
+    # ficar indistinguiveis, nem no prompt nem no registro.
+    if linhagem:
+        partes.append(linhagem)
     direta = _STAGE1_DIRETIVAS.get(stage1_format)
     if direta:
         partes.append(direta)

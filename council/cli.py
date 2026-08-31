@@ -11,7 +11,8 @@ from dataclasses import asdict
 from pathlib import Path
 
 from . import config as cfgmod
-from .engine import Council, Interruption, ResumeError, RunInterrupted, finalize_run, load_partial_for_resume
+from .engine import (Council, Interruption, RefError, ResumeError, RunInterrupted,
+                     finalize_run, load_partial_for_resume)
 from .runs import final_runs
 
 BOLD, DIM, RESET = "\033[1m", "\033[2m", "\033[0m"
@@ -491,6 +492,11 @@ def cmd_deliberate(args) -> int:
             rec = council.run(Deliberation(question, profile=perfil, bundle=bundle,
                                            run_refs=refs),
                               runs_dir=runs_dir, interruption=interrupcao)
+    except RefError as e:
+        # fail-closed com codigo nomeado, como o resume. Nenhuma chamada paga
+        # acontece antes disto, entao reprovar aqui nao custa nada ao operador.
+        _err(str(e))
+        return 2
     except RunInterrupted as e:
         _err(f"interrompido: {e} (o que ja foi pago esta no parcial)")
         return 130
@@ -771,7 +777,11 @@ def build_parser() -> argparse.ArgumentParser:
     dl.add_argument("question", nargs="?", help="a pergunta (ou stdin)")
     dl.add_argument("--profile", help="nome do perfil em [profiles] do council.toml")
     dl.add_argument("--bundle", help="arquivo de evidencia da deliberacao, ou - para stdin")
-    dl.add_argument("--ref", action="append", help="prefixo de sha de deliberacao anterior (repetivel)")
+    dl.add_argument("--ref", action="append",
+                    help="prefixo de sha de deliberacao anterior (repetivel). Injeta a "
+                         "sintese, o consenso e a divisao dela no estagio 1, em secao "
+                         "propria separada do --bundle. UM NIVEL: o que a referida "
+                         "referiu nao e puxado")
     dl.add_argument("--members", help="subconjunto por nome, separado por virgula")
     dl.add_argument("--chairman", help="usa este conselheiro como presidente")
     dl.add_argument("--json", action="store_true", help="registro completo em JSON no stdout")

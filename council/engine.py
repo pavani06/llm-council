@@ -14,7 +14,8 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from .config import Config, Member
-from .prompts import DEFAULT_CRITERIA, chairman_prompt, ranking_prompt, stage1_user_prompt
+from .prompts import (DEFAULT_CRITERIA, chairman_prompt, linhagem_section,
+                      ranking_prompt, stage1_user_prompt)
 from .provenance import config_digest, seal
 from .providers import Reply
 from .runs import partial_path, stamp_for
@@ -45,6 +46,8 @@ class Deliberation:
     profile: Any = None            # config.Profile | None
     bundle: str | None = None
     run_refs: list[str] = field(default_factory=list)
+    # preenchido pelo engine a partir de run_refs; nao vem do chamador
+    linhagem: str | None = None
 
 
 @dataclass
@@ -121,6 +124,7 @@ class Run:
     profile_name: str | None = None
     bundle_sha256: str | None = None
     run_refs: list[str] = field(default_factory=list)
+    run_refs_sha256: str | None = None
     candidates: list[dict[str, Any]] = field(default_factory=list)
     decision: dict[str, Any] | None = None
     # sobrevivencia (aditivo, defaults neutros: so parcial nasce marcado)
@@ -192,6 +196,58 @@ class ResumeError(Exception):
         self.code = code
 
 
+class RefError(Exception):
+    """Referencia de linhagem inutilizavel: fail-closed, erro nomeado.
+
+    O codigo (ref_not_found, ref_sem_sintese) e a interface, como no ResumeError.
+    """
+
+    def __init__(self, code: str, msg: str):
+        super().__init__(f"{code}: {msg}")
+        self.code = code
+
+
+def linhagem_de_refs(refs: list[str], runs_dir: Path | None) -> str | None:
+    """Le os registros referidos e monta a secao de linhagem. UM NIVEL.
+
+    Nao segue o `run_refs` do referido: puxar transitivamente faria o custo
+    explodir e o conteudo degradar a cada salto.
+
+    Referencia degenerada REPROVA em vez de injetar o que houver. Injetar uma
+    sintese que falhou alimentaria o conselho com um nao-resultado como se fosse
+    conclusao, e o registro novo selaria linhagem para uma deliberacao que nao
+    concluiu — que e a classe de defeito que este conserto remove, um nivel
+    acima. Parcial e interrompido nao chegam aqui: o CLI e o MCP resolvem os
+    prefixos por `final_runs()`, que ja os exclui.
+    """
+    if not refs:
+        return None
+    if runs_dir is None:
+        raise RefError("ref_not_found", "run_refs pedido sem runs_dir para resolver")
+    carregados: list[dict[str, Any]] = []
+    for sha in refs:
+        achado = None
+        for p in sorted(Path(runs_dir).glob("*.json")):
+            try:
+                d = json.loads(p.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError):
+                continue
+            if isinstance(d, dict) and d.get("sha256") == sha:
+                achado = d
+                break
+        if achado is None:
+            raise RefError("ref_not_found",
+                           f"registro {sha[:12]} nao encontrado em {runs_dir}")
+        syn = achado.get("synthesis") or {}
+        if not syn.get("ok") or not str(syn.get("content") or "").strip():
+            raise RefError("ref_sem_sintese",
+                           f"registro {sha[:12]} nao tem sintese utilizavel "
+                           f"(ok={syn.get('ok')!r}) — referir uma deliberacao que nao "
+                           f"concluiu injetaria nao-resultado como conclusao")
+        carregados.append(achado)
+    return linhagem_section(carregados)
+
+
 class Council:
     def __init__(self, cfg: Config, progress: Progress | None = None):
         self.cfg = cfg
@@ -202,12 +258,16 @@ class Council:
     def _ask_one(self, m: Member, spec: Deliberation) -> MemberAnswer:
         s = self.cfg.settings
         ep = self.cfg.endpoint(m.provider)
-        if spec.profile is None:
+        if spec.profile is None and not spec.linhagem:
             # caminho sem perfil: payload identico ao historico, uma mensagem user.
             messages = [{"role": "user", "content": spec.question}]
         else:
+            # com linhagem e sem perfil, o formato e prose: o que muda e a secao
+            # nova, nao a diretiva. Sem linhagem, este ramo e o de sempre.
             user = stage1_user_prompt(
-                spec.question, spec.bundle, spec.profile.stage1_format
+                spec.question, spec.bundle,
+                spec.profile.stage1_format if spec.profile else "prose",
+                linhagem=spec.linhagem,
             )
             papel = spec.profile.roles.get(m.name)
             if papel:
@@ -455,6 +515,16 @@ class Council:
         rec.run_refs = list(spec.run_refs)
         if spec.bundle is not None:
             rec.bundle_sha256 = hashlib.sha256(spec.bundle.encode("utf-8")).hexdigest()
+        # A linhagem vira conteudo aqui e e SELADA, espelhando bundle_sha256: um
+        # registro que afirma linhagem tem de endereçar o que de fato injetou,
+        # senao o conserto reproduz o defeito que remove, um nivel acima.
+        #
+        # Depois dos campos da spec de proposito: linhagem_de_refs pode levantar,
+        # e a invariante acima diz que a origem entra no registro ANTES de
+        # qualquer retorno antecipado.
+        spec.linhagem = linhagem_de_refs(spec.run_refs, runs_dir)
+        if spec.linhagem is not None:
+            rec.run_refs_sha256 = hashlib.sha256(spec.linhagem.encode("utf-8")).hexdigest()
         if resume_from is not None:
             # antes do 1o checkpoint: o rastro propio do resume ja nasce com o
             # sufixo -r e nunca colide com o parcial referenciado

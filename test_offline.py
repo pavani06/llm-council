@@ -1051,6 +1051,20 @@ model = "gpt-5.6-sol"
         return _chat
 
     prof_dec = _Prof3(name="cont", chairman_mode="decider", stage1_format="proposal")
+    # registro referido de verdade: refs falsos deixaram de ser aceitos, porque
+    # gravar linhagem sem resolver conteudo e o defeito que a issue #53 remove.
+    import tempfile as _tmp21
+    from council import prompts as _pr21
+    _REF21_DIR = Path(_tmp21.mkdtemp()) / "runs"
+    _REF21_DIR.mkdir(parents=True)
+    _REF21_SHA = "d" * 64
+    _REF21_REG = {"sha256": _REF21_SHA, "partial": False, "question": "e antes disso?",
+                  "synthesis": {"ok": True, "content": "sintese da deliberacao anterior"},
+                  "consensus": [{"member": "gpt", "score": 0.72}], "divided": False,
+                  "run_refs": []}
+    (_REF21_DIR / "20260101T000000+0000-d.json").write_text(
+        json.dumps(_REF21_REG), encoding="utf-8")
+
     BUNDLE21 = "evidencia curta do plano"
 
     # (b) decider com DECISION valida: decisao parseada, escolha real, bundle selado
@@ -1059,11 +1073,14 @@ model = "gpt-5.6-sol"
     AnthropicEndpoint.chat = Endpoint.chat
     try:
         r21b = Council(cfg21).run(_Del3("qual o passo?", profile=prof_dec, bundle=BUNDLE21,
-                                        run_refs=["abc123"]))
+                                        run_refs=[_REF21_SHA]), runs_dir=_REF21_DIR)
     finally:
         Endpoint.chat, AnthropicEndpoint.chat = orig_e3, orig_a3
-    check(r21b.profile_name == "cont" and r21b.run_refs == ["abc123"],
+    check(r21b.profile_name == "cont" and r21b.run_refs == [_REF21_SHA],
           "perfil e run_refs no registro")
+    check(r21b.run_refs_sha256 == _hl21.sha256(
+              _pr21.linhagem_section([_REF21_REG]).encode("utf-8")).hexdigest(),
+          "run_refs_sha256 sela a linhagem injetada, como bundle_sha256 sela o bundle")
     check(r21b.bundle_sha256 == _hl21.sha256(BUNDLE21.encode()).hexdigest(),
           "bundle_sha256 = sha256 do conteudo (conferido a mao)")
     nomes21 = {m["name"] for m in r21b.members}
@@ -1145,8 +1162,8 @@ model = "gpt-5.6-sol"
     cfg_sem = _copy21.copy(cfg21)
     cfg_sem.has_key = lambda p: False
     r21h = Council(cfg_sem).run(_Del3("q?", profile=prof_dec, bundle="ctx",
-                                      run_refs=["ref1"]))
-    check(r21h.profile_name == "cont" and r21h.run_refs == ["ref1"]
+                                      run_refs=[_REF21_SHA]), runs_dir=_REF21_DIR)
+    check(r21h.profile_name == "cont" and r21h.run_refs == [_REF21_SHA]
           and r21h.bundle_sha256 == _hl21.sha256(b"ctx").hexdigest(),
           "retorno antecipado (sem conselheiros) mantem profile/refs/bundle no registro")
 
@@ -2674,6 +2691,87 @@ model = "gpt-5.6-sol"
                   f"parcial lite reprova por stage2_lite, nao por incompletude ({e34.code})")
             check("completo" not in str(e34).lower() or "nao plena" in str(e34),
                   f"o erro nao afirma incompletude de um estagio 2 completo ({e34})")
+
+    # 35) run_refs vira conteudo, selado e rotulado (issue #53, item 2)
+    from council import prompts as _pr35
+    from council import engine as _eng35
+    import tempfile as _t35
+
+    # (a) o caminho sem refs continua byte-identico
+    check(_pr35.stage1_user_prompt("pergunta pura") == "pergunta pura",
+          "sem bundle e sem linhagem, o payload continua sendo a pergunta crua")
+
+    # (b) linhagem entra em secao propria, distinta do bundle
+    # o cabecalho "LINHAGEM" e do linhagem_section, nao do stage1_user_prompt:
+    # quem monta a secao carimba o rotulo, quem monta o prompt so a posiciona.
+    lin35 = _pr35.linhagem_section([
+        {"sha256": "abc123" + "0" * 58, "question": "pergunta anterior?",
+         "synthesis": {"ok": True, "content": "Sintese anterior."},
+         "consensus": [], "divided": False}])
+    p_lin35 = _pr35.stage1_user_prompt("q?", None, "prose", linhagem=lin35)
+    check("LINHAGEM" in p_lin35 and "Sintese anterior." in p_lin35,
+          "linhagem entra no prompt sob rotulo proprio")
+    check(p_lin35 != "q?", "com linhagem o payload deixa de ser a pergunta crua")
+
+    p_amb35 = _pr35.stage1_user_prompt("q?", "evidencia colada a mao", "prose",
+                                       linhagem=lin35)
+    check("CONTEXTO" in p_amb35 and "LINHAGEM" in p_amb35,
+          "bundle e linhagem coexistem, que e o unico uso observado")
+    check(p_amb35.index("CONTEXTO") < p_amb35.index("LINHAGEM")
+          and "evidencia colada a mao" not in p_amb35.split("LINHAGEM")[1],
+          "linhagem nao e concatenada dentro do bloco de contexto")
+
+    # (c) divisao propagada: a sintese sozinha ja alisou a divergencia
+    sec_div35 = _pr35.linhagem_section([
+        {"sha256": "a" * 64, "question": "q1?", "synthesis": {"ok": True, "content": "S1"},
+         "consensus": [{"member": "x", "score": 0.5}], "divided": True}])
+    sec_uni35 = _pr35.linhagem_section([
+        {"sha256": "b" * 64, "question": "q2?", "synthesis": {"ok": True, "content": "S2"},
+         "consensus": [{"member": "x", "score": 0.9}], "divided": False}])
+    check("DIVIDID" in sec_div35.upper() and "DIVIDID" not in sec_uni35.upper(),
+          "a linhagem carrega que a deliberacao referida estava dividida")
+
+    with _t35.TemporaryDirectory() as td35:
+        d35 = Path(td35) / "runs"
+        d35.mkdir(parents=True)
+
+        def _grava35(nome, **kw):
+            base = {"sha256": kw.pop("sha"), "partial": False, "question": "q anterior?",
+                    "synthesis": {"ok": True, "content": "sintese anterior"},
+                    "consensus": [{"member": "m", "score": 0.7}], "divided": False,
+                    "run_refs": []}
+            base.update(kw)
+            (d35 / nome).write_text(json.dumps(base), encoding="utf-8")
+            return base
+
+        # (d) um nivel so: o avo nao entra
+        _grava35("20260101T000000+0000-a.json", sha="a" * 64,
+                 synthesis={"ok": True, "content": "SINTESE DO AVO"})
+        _grava35("20260102T000000+0000-b.json", sha="b" * 64,
+                 synthesis={"ok": True, "content": "SINTESE DO PAI"},
+                 run_refs=["a" * 64])
+        texto35 = _eng35.linhagem_de_refs(["b" * 64], d35)
+        check("SINTESE DO PAI" in texto35, "a linhagem traz a sintese do referido")
+        check("SINTESE DO AVO" not in texto35,
+              "a linhagem NAO recursa: o referido do referido fica de fora")
+
+        # (e) selo: nada injetado, nada selado — o par do teste em (b) do bloco 21,
+        # que confere o sha da linhagem de fato injetada.
+        r_sem35 = _eng35.Run(question="q", seed=1, started_at="x", config_source="y")
+        check(r_sem35.run_refs_sha256 is None,
+              "sem refs o registro nao sela linhagem nenhuma")
+        check(_eng35.linhagem_de_refs([], d35) is None,
+              "lista de refs vazia nao produz secao")
+
+        # (f) referencia degenerada: final sem sintese util
+        _grava35("20260103T000000+0000-c.json", sha="c" * 64,
+                 synthesis={"ok": False, "content": "", "error": "timeout"})
+        try:
+            _eng35.linhagem_de_refs(["c" * 64], d35)
+            check(False, "referencia sem sintese levanta erro nomeado")
+        except _eng35.RefError as e35:
+            check(e35.code == "ref_sem_sintese",
+                  f"referencia degenerada reprova por codigo nomeado ({e35.code})")
 
     print()
     print()
