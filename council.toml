@@ -29,6 +29,25 @@ base_url     = "https://api.z.ai/api/coding/paas/v4"
 api_key_env  = "ZAI_API_KEY"
 known_models = ["glm-5.3", "glm-5-turbo", "glm-4.7"]  # liberados no coding plan
 
+[providers.gemini]
+# Quinto provedor, adicionado em 2026-08-31 para dar ao presidente distancia de
+# familia: os quatro conselheiros esgotam openai/deepseek/anthropic/zai, entao
+# sem um quinto qualquer escolha de presidente se sobrepoe a algum deles.
+# Forma OpenAI-compativel — nenhum adaptador novo, so este bloco.
+#
+# VERIFICADO em 2026-08-31, sem gastar deliberacao:
+#   GET  /models            -> 200, 54 modelos
+#   POST /chat/completions  -> o id `gemini-2.5-pro` responde 404 "no longer
+#     available to new users. Please update your code to use
+#     models/gemini-3.1-pro-preview" — o proprio Google fixa o id abaixo.
+#
+# NAO ESTA EM USO: a chave responde 429 RESOURCE_EXHAUSTED ("prepayment credits
+# are depleted"). Listar modelos funciona sem credito, gerar nao. O presidente
+# segue em openai ate haver credito; ligar e trocar `provider` no [chairman].
+base_url     = "https://generativelanguage.googleapis.com/v1beta/openai"
+api_key_env  = "GEMINI_API_KEY"
+known_models = ["gemini-3.1-pro-preview"]  # unico pro servido a chaves novas
+
 # --- conselheiros -------------------------------------------------------
 # Diversidade de familia e o que faz o conselho valer: tres modelos do mesmo
 # treinador erram junto e o ranqueamento vira teatro.
