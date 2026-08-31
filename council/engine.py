@@ -196,6 +196,25 @@ class ResumeError(Exception):
         self.code = code
 
 
+def _aviso_divergencia(rotulo: str, pedido: str, entrada: dict[str, Any]) -> str | None:
+    """Aviso quando a rota serviu modelo diferente do requisitado.
+
+    Nao reprova: descobrir isso no meio de uma deliberacao ja paga e abortar
+    custaria as chamadas sem entregar nada. Mas registrar em silencio um
+    conselho que deliberou com outra composicao e o defeito que este conserto
+    remove — entao o registro guarda os DOIS valores lado a lado e o aviso
+    aponta a divergencia.
+
+    `model_served` None nao e divergencia: e a rota nao tendo informado, o que
+    o proprio None ja declara no registro.
+    """
+    servido = entrada.get("model_served")
+    if not servido or servido == pedido:
+        return None
+    return (f"{rotulo}: modelo requisitado '{pedido}', rota serviu '{servido}' — "
+            f"o registro guarda os dois")
+
+
 class RefError(Exception):
     """Referencia de linhagem inutilizavel: fail-closed, erro nomeado.
 
@@ -262,14 +281,15 @@ class Council:
             # caminho sem perfil: payload identico ao historico, uma mensagem user.
             messages = [{"role": "user", "content": spec.question}]
         else:
-            # com linhagem e sem perfil, o formato e prose: o que muda e a secao
-            # nova, nao a diretiva. Sem linhagem, este ramo e o de sempre.
+            # Sem perfil (mas com bundle ou linhagem) o formato e prose e nao ha
+            # papeis: o que muda e a secao de conteudo, nao a diretiva nem o
+            # system. Com perfil, este ramo e o de sempre.
             user = stage1_user_prompt(
                 spec.question, spec.bundle,
                 spec.profile.stage1_format if spec.profile else "prose",
                 linhagem=spec.linhagem,
             )
-            papel = spec.profile.roles.get(m.name)
+            papel = spec.profile.roles.get(m.name) if spec.profile else None
             if papel:
                 messages = [
                     {"role": "system", "content": papel},
@@ -559,6 +579,10 @@ class Council:
                 {"name": a.name, "provider": a.provider, "model": a.model, **a.reply.as_dict()}
                 for a in answers_all
             ]
+            for e in rec.stage1:
+                aviso = _aviso_divergencia(f"estagio 1: {e['name']}", e["model"], e)
+                if aviso:
+                    rec.warnings.append(aviso)
             answers = {a.name: a.reply.content for a in answers_all if a.ok}
             for a in answers_all:
                 if not a.ok:
@@ -687,6 +711,9 @@ class Council:
             "blind": s.blind_chairman,
             **reply.as_dict(),
         }
+        aviso_pres = _aviso_divergencia("presidente", self.cfg.chairman.model, rec.synthesis)
+        if aviso_pres:
+            rec.warnings.append(aviso_pres)
         if not reply.ok:
             rec.warnings.append(f"estagio 3: presidente falhou — {reply.error}")
         elif mode == "decider":

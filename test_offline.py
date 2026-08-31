@@ -2773,6 +2773,74 @@ model = "gpt-5.6-sol"
             check(e35.code == "ref_sem_sintese",
                   f"referencia degenerada reprova por codigo nomeado ({e35.code})")
 
+    # 36) o registro para de afirmar o que nao foi verificado (issue #54)
+    from council.providers import Reply as _Rep36, Endpoint as _Ep36, AnthropicEndpoint as _An36
+    from types import SimpleNamespace as _NS36
+
+    # (a) o campo existe e nasce nulo — nunca herda o pedido
+    check(_Rep36(ok=True).model_served is None,
+          "model_served nasce None: rota que nao informa nao vira pedido herdado")
+    check("model_served" in _Rep36(ok=True).as_dict(),
+          "model_served viaja no as_dict, logo entra em toda entrada de resposta")
+
+    class _FR36:
+        def __init__(self, corpo): self._c = corpo
+        def read(self): return self._c
+
+    _orig_req36, _orig_chat36 = _Ep36._request, _Ep36.chat
+    _Ep36.chat = CHAT_REAL
+    try:
+        # (b) rota que informa o modelo servido: sela o que voltou
+        _Ep36._request = lambda self, path, payload, timeout, method="POST": _FR36(
+            b'{"model":"gpt-5.6-terra-2026-08","choices":[{"message":{"content":"ok"},'
+            b'"finish_reason":"stop"}],"usage":{}}')
+        r_b36 = _Ep36("openai", "https://x/v1", "k").chat(
+            "gpt-5.6-terra", [{"role": "user", "content": "oi"}], retries=0)
+        check(r_b36.model_served == "gpt-5.6-terra-2026-08",
+              f"sela o modelo que a rota devolveu ({r_b36.model_served!r})")
+
+        # (c) rota que nao informa: null EXPLICITO, nao o pedido
+        _Ep36._request = lambda self, path, payload, timeout, method="POST": _FR36(
+            b'{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}],"usage":{}}')
+        r_c36 = _Ep36("openai", "https://x/v1", "k").chat(
+            "gpt-5.6-terra", [{"role": "user", "content": "oi"}], retries=0)
+        check(r_c36.model_served is None,
+              f"rota sem o campo sela None, nao o requisitado ({r_c36.model_served!r})")
+    finally:
+        _Ep36._request, _Ep36.chat = _orig_req36, _orig_chat36
+
+    # (d) caminho do SDK anthropic
+    r_d36 = _An36._parse_sdk(
+        _NS36(model="claude-opus-5-20260801",
+              content=[_NS36(type="text", text="t")],
+              usage=_NS36(input_tokens=1, output_tokens=1), stop_reason="end_turn",
+              _request_id=""), 0.0)
+    check(r_d36.model_served == "claude-opus-5-20260801",
+          f"anthropic: sela o modelo da resposta ({r_d36.model_served!r})")
+    r_d36b = _An36._parse_sdk(
+        _NS36(content=[_NS36(type="text", text="t")],
+              usage=_NS36(input_tokens=1, output_tokens=1), stop_reason="end_turn",
+              _request_id=""), 0.0)
+    check(r_d36b.model_served is None, "anthropic sem o campo: None explicito")
+
+    # (e) divergencia: nao aborta, mas nao passa em silencio
+    cfg36 = cfgmod.load(Path(__file__).parent / "council.toml")
+    def chat_div36(self, model, messages, **kw):
+        return _Rep36(ok=True, content="resposta qualquer", model_served=model + "-OUTRO")
+    _o36, _oa36 = Endpoint.chat, AnthropicEndpoint.chat
+    Endpoint.chat, AnthropicEndpoint.chat = chat_div36, chat_div36
+    try:
+        rec36 = Council(cfg36).run("pergunta?", skip_ranking=True)
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = _o36, _oa36
+    divs36 = [w for w in rec36.warnings if "servi" in w.lower()]
+    check(divs36, f"divergencia entre pedido e servido vira aviso ({rec36.warnings})")
+    check(any("-OUTRO" in w for w in divs36),
+          "o aviso nomeia o modelo que de fato respondeu")
+    check(all(e.get("model_served", "").endswith("-OUTRO")
+              for e in rec36.stage1 if e.get("ok")),
+          "cada entrada de resposta guarda o servido ao lado do pedido")
+
     print()
     print()
     if FALHAS:

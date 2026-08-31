@@ -43,6 +43,9 @@ class Reply:
     attempts: int = 1
     finish: str = ""
     request_id: str = ""
+    # Modelo que a ROTA disse ter servido. None quando ela nao informa — nunca
+    # herda o requisitado: herdar em silencio e o defeito (issue #54, item 1).
+    model_served: str | None = None
 
     @property
     def truncated(self) -> bool:
@@ -60,6 +63,7 @@ class Reply:
             "attempts": self.attempts,
             "finish": self.finish,
             "request_id": self.request_id,
+            "model_served": self.model_served,
         }
 
 
@@ -228,6 +232,8 @@ class Endpoint:
 
     @staticmethod
     def _parse(body: dict, started: float, attempt: int) -> Reply:
+        # o que a rota diz ter servido; ausente vira None, nunca o requisitado
+        servido = (body.get("model") or None)
         choices = body.get("choices") or []
         if not choices:
             err = body.get("error") or body
@@ -236,6 +242,7 @@ class Endpoint:
                 error=f"resposta sem choices: {json.dumps(err)[:300]}",
                 latency_s=time.monotonic() - started,
                 attempts=attempt,
+                model_served=servido,
             )
         msg = choices[0].get("message") or {}
         finish = choices[0].get("finish_reason") or ""
@@ -256,6 +263,7 @@ class Endpoint:
                 usage=usage,
                 latency_s=time.monotonic() - started,
                 attempts=attempt,
+                model_served=servido,
             )
         return Reply(
             ok=True,
@@ -263,6 +271,7 @@ class Endpoint:
             reasoning=reasoning,
             usage=usage,
             finish=finish,
+            model_served=servido,
             latency_s=time.monotonic() - started,
             attempts=attempt,
         )
@@ -420,6 +429,7 @@ class AnthropicEndpoint(Endpoint):
         )
         rid = getattr(resp, "_request_id", "") or ""
         stop = getattr(resp, "stop_reason", "") or ""
+        servido = getattr(resp, "model", None) or None
         elapsed = time.monotonic() - started
 
         if stop == "refusal":
@@ -427,6 +437,7 @@ class AnthropicEndpoint(Endpoint):
             cat = getattr(det, "category", None)
             exp = getattr(det, "explanation", None)
             return Reply(ok=False, usage=usage, finish=stop, request_id=rid, latency_s=elapsed,
+                         model_served=servido,
                          error=f"recusa do modelo (categoria={cat}): {exp}")
 
         blocks = getattr(resp, "content", None) or []
@@ -438,10 +449,11 @@ class AnthropicEndpoint(Endpoint):
         if not text:
             extra = " — o teto foi consumido antes de sair texto" if stop == "max_tokens" else ""
             return Reply(ok=False, usage=usage, reasoning=thinking, finish=stop, request_id=rid,
-                         latency_s=elapsed, error=f"sem bloco de texto (stop_reason={stop}){extra}")
+                         latency_s=elapsed, model_served=servido,
+                         error=f"sem bloco de texto (stop_reason={stop}){extra}")
 
         return Reply(ok=True, content=text, reasoning=thinking, usage=usage, finish=stop,
-                     request_id=rid, latency_s=elapsed)
+                     request_id=rid, latency_s=elapsed, model_served=servido)
 
 
 ENDPOINT_TYPES = {"openai": Endpoint, "anthropic": AnthropicEndpoint}
