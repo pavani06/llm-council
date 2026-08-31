@@ -277,8 +277,13 @@ class Council:
     def _ask_one(self, m: Member, spec: Deliberation) -> MemberAnswer:
         s = self.cfg.settings
         ep = self.cfg.endpoint(m.provider)
-        if spec.profile is None and not spec.linhagem:
-            # caminho sem perfil: payload identico ao historico, uma mensagem user.
+        if spec.profile is None and not spec.linhagem and not spec.bundle:
+            # Pergunta crua so quando NAO HA CONTEUDO: sem perfil, sem linhagem e
+            # sem bundle. A invariante de stage1_user_prompt e sobre ausencia de
+            # conteudo, nao sobre ausencia de perfil — uma execucao com bundle
+            # nunca esteve coberta por ela. Sem o `not spec.bundle`, o bundle era
+            # descartado enquanto bundle_sha256 era selado, e o registro afirmava
+            # contexto que nenhum conselheiro leu (issue #54, item 2).
             messages = [{"role": "user", "content": spec.question}]
         else:
             # Sem perfil (mas com bundle ou linhagem) o formato e prose e nao ha

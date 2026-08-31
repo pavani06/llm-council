@@ -2841,6 +2841,33 @@ model = "gpt-5.6-sol"
               for e in rec36.stage1 if e.get("ok")),
           "cada entrada de resposta guarda o servido ao lado do pedido")
 
+    # (f) issue #54 item 2: bundle sem perfil chega ao conselheiro
+    vistos36 = []
+    def chat_cap36(self, model, messages, **kw):
+        vistos36.append(messages[-1]["content"])
+        return _Rep36(ok=True, content="ok")
+    _o36b, _oa36b = Endpoint.chat, AnthropicEndpoint.chat
+    Endpoint.chat, AnthropicEndpoint.chat = chat_cap36, chat_cap36
+    try:
+        Council(cfg36).run(_eng35.Deliberation("q?", bundle="EVIDENCIA SEM PERFIL"),
+                           skip_ranking=True)
+        com36 = list(vistos36)
+        vistos36.clear()
+        # (g) a invariante genuina: sem conteudo nenhum, pergunta crua byte a byte
+        Council(cfg36).run(_eng35.Deliberation("q?"), skip_ranking=True)
+        sem36 = list(vistos36)
+    finally:
+        Endpoint.chat, AnthropicEndpoint.chat = _o36b, _oa36b
+    # o presidente tambem passa por chat: o payload dele e o prompt de sintese,
+    # nao o do estagio 1. So as chamadas de conselheiro interessam aqui.
+    _e1_36 = lambda ch: [c for c in ch if "Voce preside um conselho" not in c]
+    com_e1_36, sem_e1_36 = _e1_36(com36), _e1_36(sem36)
+    check(len(com_e1_36) == 4 and all("EVIDENCIA SEM PERFIL" in c for c in com_e1_36),
+          f"bundle sem perfil chega aos 4 conselheiros ({len(com_e1_36)} chamadas)")
+    check(len(sem_e1_36) == 4 and all(c == "q?" for c in sem_e1_36),
+          f"sem bundle, sem linhagem e sem perfil o payload continua a pergunta crua "
+          f"({[c[:20] for c in sem_e1_36[:2]]})")
+
     print()
     print()
     if FALHAS:
