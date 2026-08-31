@@ -81,12 +81,28 @@ model    = "glm-5.3"
 
 # --- presidente ---------------------------------------------------------
 # De proposito FORA do conselho: quem sintetiza nao deve estar julgando a
-# propria resposta. Troque por outro provedor se quiser ainda mais distancia.
+# propria resposta. E agora tambem fora de todas as familias do conselho.
+#
+# Ate 2026-08-31 o presidente era openai/gpt-5.6-sol e compartilhava provedor
+# com o conselheiro `gpt`. Nao era descuido: os quatro conselheiros esgotavam os
+# quatro provedores configurados, entao qualquer escolha aqui se sobrepunha a
+# algum deles. Com o quinto provedor (gemini) a sobreposicao deixou de existir
+# em vez de ser declarada — o presidente nao compartilha treinador com nenhum
+# conselheiro.
+#
+# O que isso fecha: `blind_chairman` apelida as respostas em ordem de consenso,
+# entao o cegamento cobria a AUTORIA e nao o ESTILO. Um presidente da mesma
+# familia podia reconhecer o irmao e favorece-lo — risco nunca medido, e agora
+# sem sujeito.
+#
+# VERIFICADO em 2026-08-31 contra a API, sem gastar deliberacao: gera, e devolve
+# o campo `model` na resposta, entao o `model_served` do registro nao nasce nulo
+# nesta rota.
 
 [chairman]
 name     = "presidente"
-provider = "openai"
-model    = "gpt-5.6-sol"   # $4 in / $20 out
+provider = "gemini"
+model    = "gemini-3.1-pro-preview"   # preco: conferir na tabela viva
 
 # --- perfis de deliberacao ----------------------------------------------
 # O custo por pergunta vale para os perfis tambem: 2 chamadas GLM por questao
